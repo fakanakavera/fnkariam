@@ -8,7 +8,7 @@ export interface UpdateGlobalData {
 export interface BackgroundData {
   id?: string;
   name?: string;
-  position?: Array<{ buildingId: number; level: number }>;
+  position?: Array<{ buildingId: number; level: number; position?: number }>;
   barbarians?: { level?: string };
 }
 
