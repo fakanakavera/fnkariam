@@ -45,6 +45,9 @@ BUILDING_REGISTRY = {
 NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
+# XLSX values are stored as-is (include Pulley + Geometry 6% discount).
+# Runtime code applies ×100/94 via src/data/resourceCosts.ts
+
 
 def col_row(ref):
     match = re.match(r"([A-Z]+)(\d+)", ref)

@@ -1,4 +1,5 @@
-import { getBuildingById } from '../data/buildingRegistry';
+import { getBuildingById, getBuildingLevel } from '../data/buildingRegistry';
+import { XLSX_RESEARCH_DISCOUNT_PERCENT } from '../data/resourceCosts';
 import type { City, CityBuilding } from '../types/game';
 import type { BuildingLevelData, ResourceKey } from '../types/buildings';
 
@@ -18,6 +19,20 @@ const TRADEGOOD_TO_RESOURCE: Record<number, ResourceKey> = {
   3: 'crystal',
   4: 'sulfur',
 };
+
+/** Applied at runtime together with per-city reduction buildings. */
+const RESEARCH_BUILD_DISCOUNT_PERCENT = XLSX_RESEARCH_DISCOUNT_PERCENT;
+
+/** Ikariam reduction buildings: 1% per level, max 50%. buildingId per resource. */
+const REDUCTION_BUILDING_BY_RESOURCE: Partial<Record<ResourceKey, number>> = {
+  wood: 23,
+  wine: 26,
+  marble: 24,
+  crystal: 25,
+  sulfur: 27,
+};
+
+const MAX_REDUCTION_BUILDING_PERCENT = 50;
 
 export interface UpgradeCost {
   wood?: number;
@@ -51,9 +66,7 @@ export interface UpgradePlan {
 }
 
 function getLevelData(buildingId: number, targetLevel: number): BuildingLevelData | undefined {
-  const definition = getBuildingById(buildingId);
-  if (!definition) return undefined;
-  return definition.levels.find((level) => level.level === targetLevel);
+  return getBuildingLevel(buildingId, targetLevel);
 }
 
 function extractCost(levelData: BuildingLevelData): UpgradeCost {
@@ -67,6 +80,30 @@ function extractCost(levelData: BuildingLevelData): UpgradeCost {
 
 function sumCost(cost: UpgradeCost): number {
   return RESOURCE_KEYS.reduce((sum, key) => sum + (cost[key] || 0), 0);
+}
+
+function getReductionBuildingDiscount(city: City, resource: ResourceKey): number {
+  const buildingId = REDUCTION_BUILDING_BY_RESOURCE[resource];
+  if (buildingId === undefined) return 0;
+
+  const building = city.details?.buildings?.find((entry) => entry.buildingId === buildingId);
+  if (!building) return 0;
+
+  return Math.min(building.level, MAX_REDUCTION_BUILDING_PERCENT);
+}
+
+function applyCityCostModifiers(city: City, baseCost: UpgradeCost): UpgradeCost {
+  const adjusted: UpgradeCost = {};
+
+  for (const key of RESOURCE_KEYS) {
+    const base = baseCost[key];
+    if (!base || base <= 0) continue;
+
+    const totalDiscount = RESEARCH_BUILD_DISCOUNT_PERCENT + getReductionBuildingDiscount(city, key);
+    adjusted[key] = Math.floor((base * (100 - totalDiscount)) / 100);
+  }
+
+  return adjusted;
 }
 
 function getResourceStock(city: City, resource: ResourceKey): number {
@@ -88,7 +125,7 @@ function evaluateUpgrade(city: City, building: CityBuilding): UpgradeOption | nu
   if (!levelData) return null;
 
   const definition = getBuildingById(building.buildingId);
-  const cost = extractCost(levelData);
+  const cost = applyCityCostModifiers(city, extractCost(levelData));
   const totalCost = sumCost(cost);
   const timeSec = levelData.timeSec;
   const resourcePerMin = timeSec > 0 ? totalCost / (timeSec / 60) : 0;
