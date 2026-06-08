@@ -34,7 +34,7 @@ export default defineContentScript({
   main() {
     let observer: MutationObserver | null = null;
 
-    document.addEventListener('IKARIAM_BUILDING_OPENED', (event) => {
+    window.addEventListener('IKARIAM_BUILDING_OPENED', (event) => {
       const customEvent = event as CustomEvent<{
         currentResources: Record<string, number>;
         woodProduction: number;

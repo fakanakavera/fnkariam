@@ -28,7 +28,7 @@ export const buildingUpgradeProcessor: PayloadProcessor = {
       changeView[0][0];
     const currentResources = headerData.currentResources as Record<string, number>;
 
-    document.dispatchEvent(
+    window.dispatchEvent(
       new CustomEvent('IKARIAM_BUILDING_OPENED', {
         detail: {
           building,
