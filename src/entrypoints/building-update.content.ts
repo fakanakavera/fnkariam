@@ -5,16 +5,12 @@ const TRADEGOOD_TO_RESOURCE: Record<number, string> = {
   4: 'sulfur',
 };
 
-export interface BuildingUpgradeDetail {
+type BuildingDetail = {
   currentResources: Record<string, number>;
   woodProduction: number;
   producedTradegood: number;
   tradegoodProduction: number;
-}
-
-let lastDetail: BuildingUpgradeDetail | null = null;
-let cleanupObserver: MutationObserver | null = null;
-let domWatcherInstalled = false;
+};
 
 function waitForBuildingUpgradePanel(timeoutMs = 3000) {
   return new Promise<{ sidebar: HTMLElement; buildingUpgrade: HTMLElement } | null>((resolve) => {
@@ -40,8 +36,8 @@ function waitForBuildingUpgradePanel(timeoutMs = 3000) {
   });
 }
 
-export function renderBuildingUpgradePanel(detail: BuildingUpgradeDetail) {
-  lastDetail = detail;
+function injectBalance(detail: BuildingDetail) {
+  const { currentResources, woodProduction, producedTradegood, tradegoodProduction } = detail;
 
   void waitForBuildingUpgradePanel().then((panel) => {
     if (!panel) return;
@@ -70,27 +66,19 @@ export function renderBuildingUpgradePanel(detail: BuildingUpgradeDetail) {
       const hint = item.querySelector('.accesshint')?.textContent || '';
       const raw = item.textContent?.replace(hint, '').replace(/\./g, '').trim() || '0';
       const required = parseInt(raw, 10);
-      const available = detail.currentResources[type] || 0;
+      const available = currentResources[type] || 0;
 
       let production = 0;
-      if (type === 'wood') production = detail.woodProduction;
-      else if (type === TRADEGOOD_TO_RESOURCE[detail.producedTradegood]) {
-        production = detail.tradegoodProduction;
-      }
+      if (type === 'wood') production = woodProduction;
+      else if (type === TRADEGOOD_TO_RESOURCE[producedTradegood]) production = tradegoodProduction;
 
       if (available < required) {
         const missing = required - available;
-        const infoText =
-          production > 0 ? `${(missing / production).toFixed(1)}h de produção` : 'Sem produção';
+        const infoText = production > 0 ? `${(missing / production).toFixed(1)}h de produção` : 'Sem produção';
         rows.push({ type, text: `-${missing.toLocaleString('de-DE')}`, color: '#990033', infoText });
       } else {
         const surplus = available - required;
-        rows.push({
-          type,
-          text: `+${surplus.toLocaleString('de-DE')}`,
-          color: '#00802b',
-          infoText: 'Suficiente',
-        });
+        rows.push({ type, text: `+${surplus.toLocaleString('de-DE')}`, color: '#00802b', infoText: 'Suficiente' });
       }
     });
 
@@ -136,29 +124,26 @@ export function renderBuildingUpgradePanel(detail: BuildingUpgradeDetail) {
     const firstAccordion = sidebar.querySelector('li.accordionItem');
     if (firstAccordion) sidebar.insertBefore(accordion, firstAccordion.nextSibling);
     else sidebar.appendChild(accordion);
+  });
+}
 
-    cleanupObserver?.disconnect();
-    cleanupObserver = new MutationObserver(() => {
-      if (!document.getElementById('buildingUpgrade')) {
-        sidebar.querySelector('.ika-missing-accordion')?.remove();
-        cleanupObserver?.disconnect();
-        cleanupObserver = null;
-      }
+export default defineContentScript({
+  matches: ['*://*.ikariam.gameforge.com/*'],
+  main() {
+    let lastDetail: BuildingDetail | null = null;
+    let observer: MutationObserver | null = null;
+
+    window.addEventListener('IKARIAM_BUILDING_OPENED', (event) => {
+      const customEvent = event as CustomEvent<BuildingDetail>;
+      lastDetail = customEvent.detail;
+      injectBalance(customEvent.detail);
     });
-    cleanupObserver.observe(document.body, { childList: true, subtree: true });
-  });
-}
 
-export function installBuildingUpgradeDomWatcher() {
-  if (domWatcherInstalled) return;
-  domWatcherInstalled = true;
-
-  const observer = new MutationObserver(() => {
-    if (!lastDetail) return;
-    if (!document.getElementById('buildingUpgrade')) return;
-    if (document.querySelector('.ika-missing-accordion')) return;
-    renderBuildingUpgradePanel(lastDetail);
-  });
-
-  observer.observe(document.body, { childList: true, subtree: true });
-}
+    observer = new MutationObserver(() => {
+      if (!lastDetail || !document.getElementById('buildingUpgrade')) return;
+      if (document.querySelector('.ika-missing-accordion')) return;
+      injectBalance(lastDetail);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  },
+});

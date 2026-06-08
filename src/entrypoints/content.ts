@@ -1,11 +1,10 @@
 import { dispatchServerResponse } from '../processors';
-import { installBuildingUpgradeDomWatcher } from '../ui/buildingUpgradePanel';
+import { processBuildingUpgrade } from '../utils/processBuildingUpgrade';
 
 export default defineContentScript({
   matches: ['*://*.ikariam.gameforge.com/*'],
   runAt: 'document_start',
   main() {
-    installBuildingUpgradeDomWatcher();
     const script = document.createElement('script');
     script.src = browser.runtime.getURL('/inject.js');
     script.type = 'module';
@@ -17,6 +16,11 @@ export default defineContentScript({
 
       try {
         const payload = JSON.parse(response);
+
+        if (url.includes('view')) {
+          processBuildingUpgrade(payload);
+        }
+
         void dispatchServerResponse(url, payload);
       } catch (error) {
         console.error('[Content Script] Falha ao parsear JSON bruto:', error);
