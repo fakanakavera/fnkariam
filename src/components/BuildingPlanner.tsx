@@ -81,6 +81,22 @@ function RecommendationCard({ option }: { option: UpgradeOption }) {
   );
 }
 
+function MissingResourcesDisplay({ missing }: { missing: Partial<Record<ResourceKey, number>> }) {
+  const entries = (Object.keys(RESOURCE_LABELS) as ResourceKey[]).filter((key) => (missing[key] || 0) > 0);
+  if (entries.length === 0) return null;
+
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px', fontWeight: 'normal', fontSize: '0.75rem' }}>
+      {entries.map((key) => (
+        <span key={key} style={{ display: 'flex', alignItems: 'center' }}>
+          <ResourceIcon src={RESOURCE_ICONS[key]} alt={RESOURCE_LABELS[key]} />
+          -{(missing[key] || 0).toLocaleString('de-DE')}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function UpgradeRow({ option }: { option: UpgradeOption }) {
   return (
     <tr>
@@ -106,6 +122,7 @@ function UpgradeRow({ option }: { option: UpgradeOption }) {
         ) : (
           <span className="planner-badge planner-badge-wait">
             Faltam recursos
+            <MissingResourcesDisplay missing={option.missingResources} />
             {option.hoursToAfford !== null && (
               <span style={{ display: 'block', fontWeight: 'normal', fontSize: '0.75rem', marginTop: '2px' }}>
                 ~{formatHours(option.hoursToAfford)} de produção
