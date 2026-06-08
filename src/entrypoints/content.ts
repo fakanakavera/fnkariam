@@ -1,9 +1,11 @@
 import { dispatchServerResponse } from '../processors';
+import { installBuildingUpgradeDomWatcher } from '../ui/buildingUpgradePanel';
 
 export default defineContentScript({
   matches: ['*://*.ikariam.gameforge.com/*'],
   runAt: 'document_start',
   main() {
+    installBuildingUpgradeDomWatcher();
     const script = document.createElement('script');
     script.src = browser.runtime.getURL('/inject.js');
     script.type = 'module';
