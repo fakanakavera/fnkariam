@@ -1,39 +1,12 @@
+import type { AccountData, City, CityDetails } from '../types/game';
+
+export type { AccountData, City, CityDetails };
+
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { GAME_STATE_STORAGE_KEY, GAME_STATE_UPDATED_MESSAGE } from '../types/gameState';
 import { loadGameState } from '../utils/gameStorage';
 
 const STALE_MS = 30 * 60 * 1000;
-
-export interface CityDetails {
-  resourceProduction: number;
-  tradegoodProduction: number;
-  currentResources: Record<number, number>;
-  wineSpendings: number;
-  citizens: number;
-  population: number;
-  safeResources: number;
-}
-
-export interface City {
-  id: string;
-  name: string;
-  coords: string;
-  tradegood: number;
-  lastUpdate: number | null;
-  details?: CityDetails;
-}
-
-export interface AccountData {
-  gold: number;
-  freeTransporters: number;
-  maxTransporters: number;
-  freeFreighters: number;
-  maxFreighters: number;
-  scientistsUpkeep: number;
-  income: number;
-  upkeep: number;
-  godGoldResult: number;
-}
 
 interface GameContextValue {
   account: AccountData | null;

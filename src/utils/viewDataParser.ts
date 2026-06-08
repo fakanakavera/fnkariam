@@ -1,7 +1,11 @@
-import type { AccountData, City } from '../context/GameContext';
+import type { AccountData, City } from '../types/game';
 import type { StoredGameState } from '../types/gameState';
-
-type PayloadEntry = [string, Record<string, unknown>];
+import {
+  asPayloadEntries,
+  getBackgroundData,
+  getHeaderData,
+  type PayloadEntry,
+} from '../payload/ikariamPayload';
 
 function parseAccount(headerData: Record<string, unknown>): AccountData {
   return {
@@ -94,14 +98,18 @@ export function applyViewDataPayload(
   payload: unknown,
   previous: StoredGameState = { account: null, cities: [], lastUpdated: 0 },
 ): StoredGameState | null {
-  if (!Array.isArray(payload)) return null;
+  const entries = asPayloadEntries(payload);
+  if (!entries) return null;
 
-  const entries = payload as PayloadEntry[];
-  const data = entries[0]?.[1];
-  const headerData = data?.headerData as Record<string, unknown> | undefined;
-  const backgroundData = data?.backgroundData as
-    | { id?: string; name?: string; position?: Array<{ buildingId: number; level: number }> }
-    | undefined;
+  return applyViewDataFromEntries(entries, previous);
+}
+
+export function applyViewDataFromEntries(
+  payload: PayloadEntry[],
+  previous: StoredGameState = { account: null, cities: [], lastUpdated: 0 },
+): StoredGameState | null {
+  const headerData = getHeaderData(payload);
+  const backgroundData = getBackgroundData(payload);
 
   if (!headerData) return null;
 

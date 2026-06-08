@@ -1,4 +1,9 @@
 import type { CombatLoot, CombatReport, CombatRound, CombatUnitResult } from '../types/combatReport';
+import {
+  asPayloadEntries,
+  getChangeViewHtml,
+  type PayloadEntry,
+} from '../payload/ikariamPayload';
 
 function parseNumber(text: string): number {
   return parseInt(text.replace(/\./g, '').replace(/,/g, ''), 10) || 0;
@@ -163,22 +168,18 @@ export function parseCombatReportHtml(html: string, sourceUrl = ''): CombatRepor
 }
 
 export function findCombatReportHtml(payload: unknown): string | null {
-  if (!Array.isArray(payload)) return null;
+  const entries = asPayloadEntries(payload);
+  if (!entries) return null;
 
-  for (const entry of payload) {
-    if (!Array.isArray(entry) || entry.length < 2) continue;
+  return findCombatReportHtmlFromEntries(entries);
+}
 
-    const action = entry[0];
-    const data = entry[1];
+export function findCombatReportHtmlFromEntries(payload: PayloadEntry[]): string | null {
+  const fromChangeView = getChangeViewHtml(payload, 'troopsReport');
+  if (fromChangeView) return fromChangeView;
 
-    if (action === 'changeView' && Array.isArray(data)) {
-      const html = data.find((item) => typeof item === 'string' && item.includes('troopsReport'));
-      if (typeof html === 'string') return html;
-    }
-
-    if (typeof data === 'string' && data.includes('troopsReport')) {
-      return data;
-    }
+  for (const [, data] of payload) {
+    if (typeof data === 'string' && data.includes('troopsReport')) return data;
   }
 
   return null;

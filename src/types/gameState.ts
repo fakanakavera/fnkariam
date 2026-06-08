@@ -1,4 +1,4 @@
-import type { AccountData, City } from '../context/GameContext';
+import type { AccountData, City } from './game';
 
 export interface StoredGameState {
   account: AccountData | null;

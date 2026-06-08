@@ -1,4 +1,4 @@
-import type { City } from '../context/GameContext';
+import type { City } from '../types/game';
 
 function parseCoords(coords: string) {
   const match = coords.match(/\[(\d+):(\d+)\]/);

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { COMBAT_REPORT_MESSAGE, COMBAT_REPORTS_STORAGE_KEY } from '../storage/combatStorage';
 import type { CombatReport } from '../types/combatReport';
 
 function formatLootValue(value: number) {
@@ -21,8 +22,8 @@ export function CombatReports() {
 
   useEffect(() => {
     const loadReports = async () => {
-      const result = await browser.storage.local.get('combatReports');
-      const stored = (result.combatReports as CombatReport[] | undefined) || [];
+      const result = await browser.storage.local.get(COMBAT_REPORTS_STORAGE_KEY);
+      const stored = (result[COMBAT_REPORTS_STORAGE_KEY] as CombatReport[] | undefined) || [];
       setReports(stored);
       if (stored.length > 0) setSelectedId(stored[0].id);
     };
@@ -30,7 +31,7 @@ export function CombatReports() {
     void loadReports();
 
     const onMessage = (message: { type?: string; payload?: CombatReport }) => {
-      if (message.type !== 'COMBAT_REPORT' || !message.payload) return;
+      if (message.type !== COMBAT_REPORT_MESSAGE || !message.payload) return;
       setReports((prev) => {
         const withoutDuplicate = prev.filter((item) => item.id !== message.payload!.id);
         return [message.payload!, ...withoutDuplicate];
@@ -45,7 +46,7 @@ export function CombatReports() {
   const selected = reports.find((report) => report.id === selectedId) || null;
 
   const clearReports = async () => {
-    await browser.storage.local.set({ combatReports: [] });
+    await browser.storage.local.set({ [COMBAT_REPORTS_STORAGE_KEY]: [] });
     setReports([]);
     setSelectedId(null);
   };

@@ -1,4 +1,4 @@
-import { GameHandler } from '../utils/gameHandler';
+import { dispatchServerResponse } from '../processors';
 
 export default defineContentScript({
   matches: ['*://*.ikariam.gameforge.com/*'],
@@ -15,11 +15,10 @@ export default defineContentScript({
 
       try {
         const payload = JSON.parse(response);
-        GameHandler.handleServerResponse(url, payload);
+        void dispatchServerResponse(url, payload);
       } catch (error) {
         console.error('[Content Script] Falha ao parsear JSON bruto:', error);
       }
     });
-
   },
 });
