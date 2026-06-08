@@ -67,8 +67,8 @@ function CostDisplay({ cost }: { cost: UpgradeCost }) {
 function RecommendationCard({ option }: { option: UpgradeOption }) {
   return (
     <div className="planner-rec-card">
-      <div className="planner-rec-title">{option.buildingName}</div>
-      <div className="planner-rec-meta">{option.cityName}</div>
+      <div className="planner-rec-title">{option.cityName}</div>
+      <div className="planner-rec-meta">{option.buildingName}</div>
       <div className="planner-rec-level">
         Nv. {option.currentLevel} → {option.nextLevel}
       </div>
@@ -76,6 +76,11 @@ function RecommendationCard({ option }: { option: UpgradeOption }) {
         <span>{formatDuration(option.timeSec)}</span>
         <span>{formatResourcePerMin(option.resourcePerMin)}</span>
       </div>
+      {!option.affordable && (
+        <span className="planner-badge planner-badge-wait" style={{ marginBottom: '6px', display: 'inline-block' }}>
+          Faltam recursos
+        </span>
+      )}
       <CostDisplay cost={option.cost} />
     </div>
   );
