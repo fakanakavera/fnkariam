@@ -1,5 +1,6 @@
 export type ResourceKey = 'wood' | 'wine' | 'marble' | 'crystal' | 'sulfur';
 
+/** Values as exported from XLSX (include 6% Pulley+Geometry). Use resourceCosts helpers at read time. */
 export interface BuildingLevelData {
   level: number;
   wood?: number;
