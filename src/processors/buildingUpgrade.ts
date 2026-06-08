@@ -1,15 +1,18 @@
-import { getChangeView, getHeaderData, getUpdateGlobalData } from '../payload/ikariamPayload';
+import {
+  getChangeView,
+  getChangeViewHtml,
+  getHeaderData,
+  getUpdateGlobalData,
+} from '../payload/ikariamPayload';
 import type { PayloadProcessor } from './types';
+
+const BUILDING_UPGRADE_MARKER = 'id="buildingUpgrade"';
 
 export const buildingUpgradeProcessor: PayloadProcessor = {
   name: 'buildingUpgrade',
 
   canHandle({ payload }) {
-    const changeView = getChangeView(payload);
-    if (!changeView) return false;
-
-    const viewHtml = changeView[0]?.[1];
-    return typeof viewHtml === 'string' && viewHtml.includes('id="buildingUpgrade"');
+    return getChangeViewHtml(payload, BUILDING_UPGRADE_MARKER) != null;
   },
 
   handle({ payload }) {
@@ -18,11 +21,14 @@ export const buildingUpgradeProcessor: PayloadProcessor = {
     const headerData = getHeaderData(payload);
 
     if (!changeView || !updateGlobalData || !headerData) return;
+    if (!getChangeViewHtml(payload, BUILDING_UPGRADE_MARKER)) return;
 
-    const building = changeView[0]?.[0];
+    const building =
+      changeView.find(([, html]) => html.includes(BUILDING_UPGRADE_MARKER))?.[0] ??
+      changeView[0][0];
     const currentResources = headerData.currentResources as Record<string, number>;
 
-    window.dispatchEvent(
+    document.dispatchEvent(
       new CustomEvent('IKARIAM_BUILDING_OPENED', {
         detail: {
           building,

@@ -5,12 +5,36 @@ const TRADEGOOD_TO_RESOURCE: Record<number, string> = {
   4: 'sulfur',
 };
 
+function waitForBuildingUpgradePanel(timeoutMs = 3000) {
+  return new Promise<{ sidebar: HTMLElement; buildingUpgrade: HTMLElement } | null>((resolve) => {
+    const startedAt = Date.now();
+
+    const check = () => {
+      const sidebar = document.getElementById('sidebarWidget');
+      const buildingUpgrade = document.getElementById('buildingUpgrade');
+      if (sidebar && buildingUpgrade) {
+        resolve({ sidebar, buildingUpgrade });
+        return;
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        resolve(null);
+        return;
+      }
+
+      requestAnimationFrame(check);
+    };
+
+    check();
+  });
+}
+
 export default defineContentScript({
   matches: ['*://*.ikariam.gameforge.com/*'],
   main() {
     let observer: MutationObserver | null = null;
 
-    window.addEventListener('IKARIAM_BUILDING_OPENED', (event) => {
+    document.addEventListener('IKARIAM_BUILDING_OPENED', (event) => {
       const customEvent = event as CustomEvent<{
         currentResources: Record<string, number>;
         woodProduction: number;
@@ -21,10 +45,10 @@ export default defineContentScript({
       const { currentResources, woodProduction, producedTradegood, tradegoodProduction } =
         customEvent.detail;
 
-      setTimeout(() => {
-        const sidebar = document.getElementById('sidebarWidget');
-        const buildingUpgrade = document.getElementById('buildingUpgrade');
-        if (!sidebar || !buildingUpgrade) return;
+      void waitForBuildingUpgradePanel().then((panel) => {
+        if (!panel) return;
+
+        const { sidebar, buildingUpgrade } = panel;
 
         sidebar.querySelector('.ika-missing-accordion')?.remove();
 
@@ -116,7 +140,7 @@ export default defineContentScript({
           }
         });
         observer.observe(document.body, { childList: true, subtree: true });
-      }, 250);
+      });
     });
   },
 });
