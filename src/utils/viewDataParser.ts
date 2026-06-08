@@ -1,4 +1,4 @@
-import type { AccountData, City } from '../types/game';
+import type { AccountData, City, CityBuilding } from '../types/game';
 import type { StoredGameState } from '../types/gameState';
 import {
   asPayloadEntries,
@@ -56,17 +56,35 @@ function mergeCityList(
   return next;
 }
 
+function parseCityBuildings(
+  position: Array<{ buildingId: number; level: number; position?: number }> | undefined,
+): CityBuilding[] {
+  if (!position) return [];
+
+  return position
+    .map((building, index) => ({
+      position: typeof building.position === 'number' ? building.position : index,
+      buildingId: building.buildingId,
+      level: building.level,
+    }))
+    .filter((building) => building.level > 0 && building.buildingId >= 0);
+}
+
 function updateCurrentCity(
   cities: City[],
   currentCityId: string,
   headerData: Record<string, unknown>,
-  backgroundData: { name?: string; position?: Array<{ buildingId: number; level: number }> },
+  backgroundData: {
+    name?: string;
+    position?: Array<{ buildingId: number; level: number; position?: number }>;
+  },
 ): City[] {
   const currentResources = (headerData.currentResources || {}) as Record<string, number>;
   const safeResources = (backgroundData.position || []).reduce(
     (sum, building) => (building.buildingId === 7 && building.level ? sum + building.level * 480 : sum),
     100,
   );
+  const buildings = parseCityBuildings(backgroundData.position);
 
   return cities.map((city) => {
     if (city.id !== currentCityId) return city;
@@ -89,6 +107,7 @@ function updateCurrentCity(
         citizens: parseFloat(String(currentResources.citizens || 0)),
         population: parseFloat(String(currentResources.population || 0)),
         safeResources,
+        buildings,
       },
     };
   });
