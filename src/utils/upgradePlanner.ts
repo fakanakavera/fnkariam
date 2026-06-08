@@ -169,7 +169,22 @@ function evaluateUpgrade(city: City, building: CityBuilding): UpgradeOption | nu
   };
 }
 
-export function buildUpgradePlan(cities: City[], topN = 5): UpgradePlan {
+function pickCityRecommendation(
+  options: UpgradeOption[],
+  mode: 'short' | 'long',
+): UpgradeOption | null {
+  if (options.length === 0) return null;
+
+  const affordable = options.filter((option) => option.affordable);
+  const pool = affordable.length > 0 ? affordable : options;
+
+  const sorted = [...pool].sort((a, b) =>
+    mode === 'short' ? b.resourcePerMin - a.resourcePerMin : a.resourcePerMin - b.resourcePerMin,
+  );
+  return sorted[0] ?? null;
+}
+
+export function buildUpgradePlan(cities: City[]): UpgradePlan {
   const allOptions: UpgradeOption[] = [];
 
   for (const city of cities) {
@@ -182,9 +197,16 @@ export function buildUpgradePlan(cities: City[], topN = 5): UpgradePlan {
     }
   }
 
-  const affordable = allOptions.filter((option) => option.affordable);
-  const shortSession = [...affordable].sort((a, b) => b.resourcePerMin - a.resourcePerMin).slice(0, topN);
-  const longSession = [...affordable].sort((a, b) => a.resourcePerMin - b.resourcePerMin).slice(0, topN);
+  const shortSession: UpgradeOption[] = [];
+  const longSession: UpgradeOption[] = [];
+
+  for (const city of cities) {
+    const cityOptions = allOptions.filter((option) => option.cityId === city.id);
+    const shortPick = pickCityRecommendation(cityOptions, 'short');
+    const longPick = pickCityRecommendation(cityOptions, 'long');
+    if (shortPick) shortSession.push(shortPick);
+    if (longPick) longSession.push(longPick);
+  }
 
   const byCity: Record<string, UpgradeOption[]> = {};
   for (const city of cities) {
