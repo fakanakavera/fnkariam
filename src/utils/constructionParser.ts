@@ -1,22 +1,111 @@
-import { getBuildingName } from '../data/buildingRegistry';
-import { findEntry, getUpdateBackgroundData, type PayloadEntry } from '../payload/ikariamPayload';
+import { getBuildingByKey, getBuildingName } from '../data/buildingRegistry';
+import { findEntry, getUpdateBackgroundData, type BackgroundBuildingPosition, type BackgroundData, type PayloadEntry } from '../payload/ikariamPayload';
 import type { ConstructionItem } from '../types/construction';
 
-export interface BackgroundBuilding {
-  buildingId: number | null;
-  name?: string;
-  level?: number;
-  isBusy?: boolean;
-  building?: string;
+const IKARIAM_BUILDING_KEY_MAP: Record<string, string> = {
+  townHall: 'camaramunicipal',
+  port: 'porto',
+  academy: 'academia',
+  shipyard: 'estaleiro',
+  dockyard: 'estaleiro',
+  barracks: 'quartel',
+  warehouse: 'armazem',
+  wall: 'muralha',
+  tavern: 'taverna',
+  museum: 'museu',
+  palace: 'palacio',
+  embassy: 'embaixada',
+  marketplace: 'mercado',
+  workshop: 'oficina',
+  hideout: 'espionagem',
+  governor: 'residenciadogovernador',
+  forest: 'guardaflorestal',
+  stonemason: 'pedreiro',
+  glassblower: 'fabricadevidro',
+  winegrower: 'viticultor',
+  alchemist: 'torrealquimista',
+  carpenter: 'carpintaria',
+  architect: 'atelierdearquitetura',
+  optician: 'oculista',
+  winecellar: 'cavesdevinho',
+  firework: 'fabricadepirotecnia',
+  temple: 'templo',
+  dump: 'deposito',
+  pirate: 'fortalezadospiratas',
+  blackmarket: 'mercadonegro',
+  archive: 'arquivosdecartasnauticas',
+  tradeport: 'estaleirocomercial',
+  shrine: 'santuariodosdeuses',
+  forge: 'forjadecronos',
+};
+
+function resolveBuildingName(building: BackgroundBuildingPosition): string {
+  if (building.name) return building.name;
+
+  if (building.building) {
+    const registryKey = IKARIAM_BUILDING_KEY_MAP[building.building] ?? building.building;
+    const fromRegistry = getBuildingByKey(registryKey)?.name;
+    if (fromRegistry) return fromRegistry;
+  }
+
+  if (typeof building.buildingId === 'number' && building.buildingId >= 0) {
+    return getBuildingName(building.buildingId);
+  }
+
+  return 'Edifício';
 }
 
-export interface UpdateBackgroundData {
-  id?: string;
-  name?: string;
-  underConstruction?: number;
-  endUpgradeTime?: number;
-  startUpgradeTime?: number;
-  position?: BackgroundBuilding[];
+function slotId(building: BackgroundBuildingPosition): number | undefined {
+  if (typeof building.groundId === 'number') return building.groundId;
+  if (typeof building.position === 'number') return building.position;
+  return undefined;
+}
+
+/** underConstruction is a city ground slot id, not a building type id. */
+export function findConstructionBuilding(bg: BackgroundData): BackgroundBuildingPosition | undefined {
+  const positions = bg.position ?? [];
+  const busyBuildings = positions.filter((building) => building.isBusy);
+  const slot = typeof bg.underConstruction === 'number' && bg.underConstruction >= 0
+    ? bg.underConstruction
+    : undefined;
+
+  if (slot != null) {
+    const bySlot =
+      positions.find((building) => slotId(building) === slot && building.isBusy) ??
+      positions.find((building) => slotId(building) === slot);
+    if (bySlot) return bySlot;
+  }
+
+  if (busyBuildings.length === 1) return busyBuildings[0];
+  if (busyBuildings.length > 1 && slot != null) {
+    return busyBuildings.find((building) => slotId(building) === slot) ?? busyBuildings[0];
+  }
+
+  return busyBuildings[0];
+}
+
+function buildConstructionItem(
+  cityId: string,
+  cityName: string,
+  building: BackgroundBuildingPosition,
+  finishTime: number,
+): ConstructionItem | null {
+  if (typeof building.buildingId !== 'number' || building.buildingId < 0) return null;
+
+  const currentLevel = building.level ?? 0;
+  const slot = slotId(building) ?? 0;
+
+  return {
+    id: `${cityId}-${building.buildingId}-${slot}-${finishTime}`,
+    cityId,
+    cityName,
+    buildingId: building.buildingId,
+    buildingName: resolveBuildingName(building),
+    currentLevel,
+    targetLevel: currentLevel + 1,
+    finishTime,
+    capturedAt: Date.now(),
+  };
 }
 
 export function parseConstructionDuration(text: string): number | null {
@@ -49,30 +138,39 @@ export function parseConstructionDuration(text: string): number | null {
   return matched ? totalSeconds * 1000 : null;
 }
 
-export function parseConstructionFromHtml(html: string, cityId: string, cityName: string): ConstructionItem[] {
-  const items: ConstructionItem[] = [];
-  const timeMatch = html.match(/Tempo de construção:\s*([^<]+)/i);
-  const durationMs = timeMatch ? parseConstructionDuration(timeMatch[1]) : null;
-  if (!durationMs) return items;
+function parseConstructionFromHtml(
+  html: string,
+  cityId: string,
+  cityName: string,
+  building?: BackgroundBuildingPosition,
+): ConstructionItem | null {
+  const durationMs = parseConstructionDuration(
+    html.match(/Tempo de construção:\s*([^<]+)/i)?.[1] ?? '',
+  );
+  if (!durationMs) return null;
 
-  const buildingMatch = html.match(/class="building ([^"]+)_l"/i);
-  const buildingKey = buildingMatch?.[1];
+  const finishTime = Date.now() + durationMs;
+
+  if (building && typeof building.buildingId === 'number') {
+    return buildConstructionItem(cityId, cityName, building, finishTime);
+  }
+
+  const buildingKey = html.match(/class="building ([^"]+)_l"/i)?.[1];
+  const registryKey = buildingKey ? IKARIAM_BUILDING_KEY_MAP[buildingKey] ?? buildingKey : undefined;
   const levelMatch = html.match(/Nível\s*(\d+)/i) || html.match(/Level\s*(\d+)/i);
   const currentLevel = levelMatch ? parseInt(levelMatch[1], 10) : 0;
 
-  items.push({
-    id: `${cityId}-html-${Date.now()}`,
+  return {
+    id: `${cityId}-html-${registryKey ?? 'building'}-${finishTime}`,
     cityId,
     cityName,
-    buildingId: -1,
-    buildingName: buildingKey || 'Edifício',
+    buildingId: getBuildingByKey(registryKey ?? '')?.buildingId ?? -1,
+    buildingName: registryKey ? getBuildingByKey(registryKey)?.name ?? buildingKey ?? 'Edifício' : 'Edifício',
     currentLevel,
     targetLevel: currentLevel + 1,
-    finishTime: Date.now() + durationMs,
+    finishTime,
     capturedAt: Date.now(),
-  });
-
-  return items;
+  };
 }
 
 export function parseConstructionFromPayload(payload: PayloadEntry[]): ConstructionItem[] {
@@ -81,81 +179,31 @@ export function parseConstructionFromPayload(payload: PayloadEntry[]): Construct
 
   const cityId = String(bg.id);
   const cityName = bg.name || `Cidade ${cityId}`;
-  const items: ConstructionItem[] = [];
-  const now = Date.now();
-
+  const building = findConstructionBuilding(bg);
   const endUpgradeTime = typeof bg.endUpgradeTime === 'number' ? bg.endUpgradeTime : -1;
-  const underConstruction = typeof bg.underConstruction === 'number' ? bg.underConstruction : -1;
-  const hasBusyBuilding = (bg.position || []).some((building) => building.isBusy);
 
-  if (endUpgradeTime <= 0 && underConstruction < 0 && !hasBusyBuilding) {
-    return [];
-  }
+  if (!building && endUpgradeTime <= 0) return [];
 
-  if (endUpgradeTime > 0) {
-    const busyBuilding = bg.position?.find(
-      (building) =>
-        building.isBusy ||
-        (typeof building.buildingId === 'number' && building.buildingId === underConstruction),
-    );
-
-    const buildingId =
-      underConstruction >= 0
-        ? underConstruction
-        : typeof busyBuilding?.buildingId === 'number'
-          ? busyBuilding.buildingId
-          : -1;
-
-    const currentLevel = busyBuilding?.level || 0;
-
-    items.push({
-      id: `${cityId}-${buildingId}-${endUpgradeTime}`,
-      cityId,
-      cityName,
-      buildingId,
-      buildingName: busyBuilding?.name || getBuildingName(buildingId),
-      currentLevel,
-      targetLevel: currentLevel + 1,
-      finishTime: endUpgradeTime * 1000,
-      capturedAt: now,
-    });
-
-    return items;
-  }
-
-  const busyBuildings = (bg.position || []).filter(
-    (building) => building.isBusy && typeof building.buildingId === 'number',
-  );
-
-  for (const building of busyBuildings) {
-    const buildingId = building.buildingId as number;
-    const currentLevel = building.level || 0;
-    items.push({
-      id: `${cityId}-${buildingId}-busy`,
-      cityId,
-      cityName,
-      buildingId,
-      buildingName: building.name || getBuildingName(buildingId),
-      currentLevel,
-      targetLevel: currentLevel + 1,
-      finishTime: now + 3600000,
-      capturedAt: now,
-    });
+  if (endUpgradeTime > 0 && building) {
+    const item = buildConstructionItem(cityId, cityName, building, endUpgradeTime * 1000);
+    return item ? [item] : [];
   }
 
   const changeView = findEntry(payload, 'changeView');
-  if (Array.isArray(changeView) && typeof changeView[1] === 'string') {
-    const htmlItems = parseConstructionFromHtml(changeView[1], cityId, cityName);
-    if (htmlItems.length > 0 && items.length === 0) {
-      return htmlItems;
-    }
-    if (htmlItems.length > 0 && items.length > 0) {
-      items[0] = {
-        ...items[0],
-        finishTime: htmlItems[0].finishTime,
-      };
-    }
+  const html = Array.isArray(changeView) && typeof changeView[1] === 'string' ? changeView[1] : '';
+
+  if (building) {
+    const htmlItem = html ? parseConstructionFromHtml(html, cityId, cityName, building) : null;
+    if (htmlItem) return [htmlItem];
+
+    const item = buildConstructionItem(cityId, cityName, building, Date.now() + 3600000);
+    return item ? [item] : [];
   }
 
-  return items;
+  if (html) {
+    const htmlItem = parseConstructionFromHtml(html, cityId, cityName);
+    return htmlItem ? [htmlItem] : [];
+  }
+
+  return [];
 }

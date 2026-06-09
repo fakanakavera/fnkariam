@@ -1,35 +1,35 @@
 import { evaluateAlerts } from '../utils/alertEngine';
 import { GAME_STATE_STORAGE_KEY } from '../types/gameState';
 import type { StoredGameState } from '../types/gameState';
-import { CONSTRUCTION_ALERT_MINUTES } from '../types/construction';
-import { loadAlertSettings } from '../storage/alertSettingsStorage';
-import { loadConstructionQueue } from '../storage/constructionStorage';
+import {
+  CONSTRUCTION_QUEUE_STORAGE_KEY,
+  CONSTRUCTION_SYNC_ALARM,
+} from '../types/construction';
+import {
+  ensureConstructionSyncAlarm,
+  runConstructionAlertCheck,
+} from '../storage/constructionStorage';
 
 export default defineBackground(() => {
+  void ensureConstructionSyncAlarm();
+  void runConstructionAlertCheck();
+
   browser.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return;
 
     if (changes[GAME_STATE_STORAGE_KEY]?.newValue) {
       void evaluateAlerts(changes[GAME_STATE_STORAGE_KEY].newValue as StoredGameState);
     }
+
+    if (changes[CONSTRUCTION_QUEUE_STORAGE_KEY]?.newValue) {
+      void runConstructionAlertCheck();
+    }
   });
 
-  browser.alarms.onAlarm.addListener(async (alarm) => {
-    if (!alarm.name.startsWith('construction-')) return;
-
-    const settings = await loadAlertSettings();
-    if (!settings.masterEnabled || !settings.construction.enabled) return;
-
-    const queue = await loadConstructionQueue();
-    const item = queue.items.find((entry) => `construction-${entry.id}` === alarm.name);
-    if (!item) return;
-
-    await browser.notifications.create(alarm.name, {
-      type: 'basic',
-      iconUrl: browser.runtime.getURL('/wxt.svg'),
-      title: 'ika-ext — Construção terminando',
-      message: `${item.buildingName} (${item.cityName}) termina em ~${CONSTRUCTION_ALERT_MINUTES} minutos`,
-    });
+  browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === CONSTRUCTION_SYNC_ALARM) {
+      void runConstructionAlertCheck();
+    }
   });
 
   void browser.storage.local.get(GAME_STATE_STORAGE_KEY).then((result) => {
