@@ -62,7 +62,7 @@ export function ConstructionQueue() {
             border: '1px solid #e8e1cf',
           }}
         >
-          Nenhuma construção ativa detectada. Visite cidades no jogo para capturar a fila.
+          Nenhuma construção ativa detectada. Abra a Câmara Municipal de cada cidade no jogo para atualizar a fila.
         </div>
       ) : (
         <div className="table-responsive">
