@@ -9,6 +9,7 @@ export interface BackgroundBuildingPosition {
   buildingId: number | null;
   level?: number;
   position?: number;
+  groundId?: number;
   name?: string;
   isBusy?: boolean;
   building?: string;
