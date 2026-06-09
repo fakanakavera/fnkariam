@@ -39,6 +39,32 @@ export function getResourceProduction(city: City, resource: ResourceKey): number
   return 0;
 }
 
+/** Net hourly stock change (production minus tavern wine burn for wine). */
+export function getResourceNetProduction(city: City, resource: ResourceKey): number {
+  const production = getResourceProduction(city, resource);
+  if (resource === 'wine') {
+    return production - (city.details?.wineSpendings || 0);
+  }
+  return production;
+}
+
+export const WAREHOUSE_PROJECTION_HOURS = 12;
+
+export type WarehouseRisk = 'safe' | 'warning' | 'danger';
+
+export function getWarehouseRisk(stock: number, safe: number, hourlyProduction: number): WarehouseRisk {
+  if (stock > safe) return 'danger';
+  if (hourlyProduction > 0 && stock + hourlyProduction * WAREHOUSE_PROJECTION_HOURS > safe) {
+    return 'warning';
+  }
+  return 'safe';
+}
+
+export function hoursUntilWarehouseUnsafe(stock: number, safe: number, hourlyProduction: number): number | null {
+  if (hourlyProduction <= 0 || stock >= safe) return null;
+  return (safe - stock) / hourlyProduction;
+}
+
 export function cityProducesResource(city: City, resource: ResourceKey): boolean {
   if (resource === 'wood') return (city.details?.resourceProduction || 0) > 0;
   return TRADEGOOD_TO_RESOURCE[city.tradegood] === resource;

@@ -1,21 +1,37 @@
 import { RESOURCE_ICONS } from '../assets/resourceIcons';
 import { useGame } from '../context/GameContext';
-import { RESOURCE_INDEX, RESOURCE_KEYS, RESOURCE_LABELS } from '../utils/resourceUtils';
+import type { ResourceKey } from '../types/buildings';
+import type { City } from '../types/game';
+import {
+  RESOURCE_INDEX,
+  RESOURCE_KEYS,
+  RESOURCE_LABELS,
+  getResourceNetProduction,
+  getWarehouseRisk,
+  hoursUntilWarehouseUnsafe,
+  type WarehouseRisk,
+} from '../utils/resourceUtils';
 import { ResourceIcon } from './shared/ResourceIcon';
 
-type RiskLevel = 'safe' | 'warning' | 'danger';
-
-function getRisk(stock: number, safe: number): RiskLevel {
-  if (stock > safe) return 'danger';
-  if (stock >= safe * 0.9) return 'warning';
-  return 'safe';
-}
-
-const RISK_COLORS: Record<RiskLevel, string> = {
+const RISK_COLORS: Record<WarehouseRisk, string> = {
   safe: '#007700',
   warning: '#b35c00',
   danger: '#cc0000',
 };
+
+function getRiskHint(city: City, resource: ResourceKey, stock: number, safe: number, risk: WarehouseRisk) {
+  if (risk === 'danger') {
+    return `+${(stock - safe).toLocaleString('pt-BR')} acima do seguro`;
+  }
+  if (risk === 'warning') {
+    const hourly = getResourceNetProduction(city, resource);
+    const hours = hoursUntilWarehouseUnsafe(stock, safe, hourly);
+    if (hours != null && hours <= 12) {
+      return `~${Math.ceil(hours)}h até ficar inseguro`;
+    }
+  }
+  return null;
+}
 
 export function WarehouseSafety() {
   const { cities } = useGame();
@@ -26,7 +42,7 @@ export function WarehouseSafety() {
         <div>
           <h2 style={{ fontSize: '1.6rem', marginBottom: '4px' }}>Segurança do Armazém</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            Recursos acima do limite seguro podem ser saqueados. Visite cada cidade para dados atualizados.
+            Vermelho: acima do seguro hoje. Laranja: ficará inseguro nas próximas 12h com a produção atual.
           </p>
         </div>
       </div>
@@ -60,11 +76,17 @@ export function WarehouseSafety() {
                       return <td key={resource}>—</td>;
                     }
                     const stock = city.details.currentResources[RESOURCE_INDEX[resource]] || 0;
-                    const risk = getRisk(stock, safe);
+                    const hourlyProduction = getResourceNetProduction(city, resource);
+                    const risk = getWarehouseRisk(stock, safe, hourlyProduction);
+                    const hint = getRiskHint(city, resource, stock, safe, risk);
+
                     return (
-                      <td key={resource} style={{ color: RISK_COLORS[risk], fontWeight: risk !== 'safe' ? 'bold' : 'normal' }}>
+                      <td
+                        key={resource}
+                        style={{ color: RISK_COLORS[risk], fontWeight: risk !== 'safe' ? 'bold' : 'normal' }}
+                      >
                         {stock.toLocaleString('pt-BR')}
-                        {risk === 'danger' && <div style={{ fontSize: '0.7rem' }}>+{(stock - safe).toLocaleString('pt-BR')}</div>}
+                        {hint && <div style={{ fontSize: '0.7rem', fontWeight: 'normal' }}>{hint}</div>}
                       </td>
                     );
                   })}
