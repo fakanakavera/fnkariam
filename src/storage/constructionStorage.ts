@@ -1,6 +1,7 @@
 import { loadAlertSettings } from './alertSettingsStorage';
 import {
   CONSTRUCTION_ALERT_MINUTES,
+  CONSTRUCTION_FINISH_ALARM_PREFIX,
   CONSTRUCTION_NOTIFIED_STORAGE_KEY,
   CONSTRUCTION_QUEUE_STORAGE_KEY,
   CONSTRUCTION_QUEUE_UPDATED_MESSAGE,
@@ -10,6 +11,16 @@ import {
 } from '../types/construction';
 
 const EMPTY_QUEUE: StoredConstructionQueue = { items: [], lastUpdated: 0 };
+
+function isQuietHour(hour: number, start: number, end: number) {
+  if (start === end) return false;
+  if (start < end) return hour >= start && hour < end;
+  return hour >= start || hour < end;
+}
+
+function finishAlarmName(item: ConstructionItem): string {
+  return `${CONSTRUCTION_FINISH_ALARM_PREFIX}${item.id}`;
+}
 
 export async function loadConstructionQueue(): Promise<StoredConstructionQueue> {
   const result = await browser.storage.local.get(CONSTRUCTION_QUEUE_STORAGE_KEY);
@@ -47,19 +58,66 @@ export async function ensureConstructionSyncAlarm() {
   }
 }
 
+async function clearConstructionFinishAlarms() {
+  const alarms = await browser.alarms.getAll();
+  await Promise.all(
+    alarms
+      .filter((alarm) => alarm.name.startsWith(CONSTRUCTION_FINISH_ALARM_PREFIX))
+      .map((alarm) => browser.alarms.clear(alarm.name)),
+  );
+}
+
+export async function scheduleConstructionFinishAlarms(queue: StoredConstructionQueue) {
+  const settings = await loadAlertSettings();
+  await clearConstructionFinishAlarms();
+
+  if (!settings.masterEnabled || !settings.construction.enabled) return;
+
+  const now = Date.now();
+  const alertLeadMs = CONSTRUCTION_ALERT_MINUTES * 60 * 1000;
+
+  for (const item of queue.items) {
+    const remaining = item.finishTime - now;
+    if (remaining <= 0) continue;
+
+    const fireAt = item.finishTime - alertLeadMs;
+    if (fireAt <= now) continue;
+
+    await browser.alarms.create(finishAlarmName(item), { when: fireAt });
+  }
+}
+
 async function fireConstructionNotification(item: ConstructionItem) {
+  const settings = await loadAlertSettings();
+  if (settings.quietHours.enabled) {
+    const hour = new Date().getHours();
+    if (isQuietHour(hour, settings.quietHours.startHour, settings.quietHours.endHour)) {
+      return;
+    }
+  }
+
   const remainingMin = Math.max(1, Math.ceil((item.finishTime - Date.now()) / 60000));
-  await browser.notifications.create(`construction-alert-${item.id}`, {
-    type: 'basic',
-    iconUrl: browser.runtime.getURL('/icon-48.png'),
-    title: 'ika-ext — Construção terminando',
-    message: `${item.buildingName} (${item.cityName}) termina em ~${remainingMin} min`,
-  });
+
+  try {
+    await browser.notifications.create(`construction-alert-${item.id}`, {
+      type: 'basic',
+      iconUrl: browser.runtime.getURL('/icon-48.png'),
+      title: 'ika-ext — Construção terminando',
+      message: `${item.buildingName} (${item.cityName}) termina em ~${remainingMin} min`,
+    });
+  } catch (error) {
+    console.error('[constructionStorage] Falha ao criar notificação:', error);
+  }
 }
 
 export async function runConstructionAlertCheck() {
   const settings = await loadAlertSettings();
   if (!settings.masterEnabled || !settings.construction.enabled) return;
+
+  if (settings.quietHours.enabled) {
+    const hour = new Date().getHours();
+    if (isQuietHour(hour, settings.quietHours.startHour, settings.quietHours.endHour)) return;
+  }
 
   const queue = await loadConstructionQueue();
   const notified = await loadNotifiedConstruction();
@@ -85,6 +143,27 @@ export async function runConstructionAlertCheck() {
   await saveNotifiedConstruction(nextNotified);
 }
 
+/** Background-only: schedule alarms and run the 5-minute window check. */
+export async function syncConstructionAlerts() {
+  const queue = await loadConstructionQueue();
+  await ensureConstructionSyncAlarm();
+  await scheduleConstructionFinishAlarms(queue);
+  await runConstructionAlertCheck();
+}
+
+export async function handleConstructionFinishAlarm(alarmName: string) {
+  const itemId = alarmName.slice(CONSTRUCTION_FINISH_ALARM_PREFIX.length);
+  const queue = await loadConstructionQueue();
+  const item = queue.items.find((entry) => entry.id === itemId);
+  if (!item) return;
+
+  const notified = await loadNotifiedConstruction();
+  if (notified[item.id]) return;
+
+  await fireConstructionNotification(item);
+  await saveNotifiedConstruction({ ...notified, [item.id]: Date.now() });
+}
+
 export async function upsertCityConstruction(cityId: string, incoming: ConstructionItem[]) {
   const previous = await loadConstructionQueue();
   const now = Date.now();
@@ -100,7 +179,5 @@ export async function upsertCityConstruction(cityId: string, incoming: Construct
 
   await saveConstructionQueue(queue);
   notifyConstructionQueueUpdated(queue);
-  await ensureConstructionSyncAlarm();
-  await runConstructionAlertCheck();
   return queue;
 }
