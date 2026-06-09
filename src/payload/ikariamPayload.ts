@@ -5,11 +5,35 @@ export interface UpdateGlobalData {
   backgroundData?: BackgroundData;
 }
 
+export interface BackgroundBuildingPosition {
+  buildingId: number | null;
+  level?: number;
+  position?: number;
+  name?: string;
+  isBusy?: boolean;
+  building?: string;
+}
+
 export interface BackgroundData {
   id?: string;
   name?: string;
-  position?: Array<{ buildingId: number; level: number; position?: number }>;
+  underConstruction?: number;
+  endUpgradeTime?: number;
+  startUpgradeTime?: number;
+  position?: BackgroundBuildingPosition[];
   barbarians?: { level?: string };
+}
+
+export function getUpdateBackgroundData(payload: PayloadEntry[]): BackgroundData | null {
+  const entry = findEntry(payload, 'updateBackgroundData');
+  if (entry && typeof entry === 'object') {
+    return entry as BackgroundData;
+  }
+
+  const fromGlobal = getUpdateGlobalData(payload)?.backgroundData;
+  if (fromGlobal) return fromGlobal;
+
+  return getBackgroundData(payload);
 }
 
 export function asPayloadEntries(payload: unknown): PayloadEntry[] | null {

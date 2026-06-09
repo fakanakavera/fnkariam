@@ -6,6 +6,11 @@ const TRADEGOOD_TO_RESOURCE: Record<number, string> = {
 };
 
 type BuildingDetail = {
+  building?: string;
+  buildingName?: string;
+  currentLevel?: number;
+  nextLevel?: number;
+  productionPreview?: string | null;
   currentResources: Record<string, number>;
   woodProduction: number;
   producedTradegood: number;
@@ -37,7 +42,14 @@ function waitForBuildingUpgradePanel(timeoutMs = 3000) {
 }
 
 function injectBalance(detail: BuildingDetail) {
-  const { currentResources, woodProduction, producedTradegood, tradegoodProduction } = detail;
+  const {
+    buildingName,
+    productionPreview,
+    currentResources,
+    woodProduction,
+    producedTradegood,
+    tradegoodProduction,
+  } = detail;
 
   void waitForBuildingUpgradePanel().then((panel) => {
     if (!panel) return;
@@ -74,7 +86,9 @@ function injectBalance(detail: BuildingDetail) {
 
       if (available < required) {
         const missing = required - available;
-        const infoText = production > 0 ? `${(missing / production).toFixed(1)}h de produção` : 'Sem produção';
+        const hours = production > 0 ? missing / production : null;
+        const infoText =
+          hours != null ? `${hours.toFixed(1)}h para conseguir` : 'Sem produção local';
         rows.push({ type, text: `-${missing.toLocaleString('de-DE')}`, color: '#990033', infoText });
       } else {
         const surplus = available - required;
@@ -89,7 +103,8 @@ function injectBalance(detail: BuildingDetail) {
 
     const title = document.createElement('a');
     title.className = `accordionTitle ${onlyOneAccordion ? 'active' : ''}`;
-    title.innerHTML = 'Balanço para Melhorar <span class="indicator"></span>';
+    const label = buildingName ? `Balanço — ${buildingName}` : 'Balanço para Melhorar';
+    title.innerHTML = `${label} <span class="indicator"></span>`;
 
     const content = document.createElement('div');
     content.className = 'accordionContent';
@@ -105,6 +120,12 @@ function injectBalance(detail: BuildingDetail) {
       `;
     });
     html += '</ul>';
+
+    if (productionPreview) {
+      html += `<div style="padding: 4px 10px 8px; font-size: 11px; color: #006600; font-weight: bold;">Após melhoria: ${productionPreview}</div>`;
+    }
+
+    html += `<div style="padding: 4px 10px 8px; font-size: 10px; color: #735333; border-top: 1px solid #e8e1cf; margin-top: 4px;">Abrir no Hub → Edifícios</div>`;
     content.innerHTML = html;
 
     accordion.appendChild(title);

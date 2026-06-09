@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'ika-ext',
     description: 'Ikariam helper extension',
-    permissions: ['tabs', 'storage'],
+    permissions: ['tabs', 'storage', 'notifications', 'alarms'],
     host_permissions: ['*://*.ikariam.gameforge.com/*'],
     web_accessible_resources: [
       {
