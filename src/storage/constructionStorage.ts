@@ -51,7 +51,7 @@ async function fireConstructionNotification(item: ConstructionItem) {
   const remainingMin = Math.max(1, Math.ceil((item.finishTime - Date.now()) / 60000));
   await browser.notifications.create(`construction-alert-${item.id}`, {
     type: 'basic',
-    iconUrl: browser.runtime.getURL('/wxt.svg'),
+    iconUrl: browser.runtime.getURL('/icon-48.png'),
     title: 'ika-ext — Construção terminando',
     message: `${item.buildingName} (${item.cityName}) termina em ~${remainingMin} min`,
   });

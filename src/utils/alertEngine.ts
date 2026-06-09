@@ -109,7 +109,7 @@ async function fireAlert(alert: PendingAlert, state: { lastFired: Record<string,
 
   await browser.notifications.create(alert.key, {
     type: 'basic',
-    iconUrl: browser.runtime.getURL('/wxt.svg'),
+    iconUrl: browser.runtime.getURL('/icon-48.png'),
     title: `ika-ext — ${alert.title}`,
     message: alert.message,
   });
