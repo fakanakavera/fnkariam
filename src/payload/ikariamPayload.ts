@@ -13,6 +13,9 @@ export interface BackgroundBuildingPosition {
   name?: string;
   isBusy?: boolean;
   building?: string;
+  buildingimg?: string;
+  completed?: number;
+  countdownText?: string;
 }
 
 export interface BackgroundData {
