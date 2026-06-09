@@ -1,13 +1,21 @@
-import { getUpdateBackgroundData } from '../payload/ikariamPayload';
+import { getChangeView, getUpdateBackgroundData, type PayloadEntry } from '../payload/ikariamPayload';
 import { upsertCityConstruction } from '../storage/constructionStorage';
 import { parseConstructionFromPayload } from '../utils/constructionParser';
 import type { PayloadProcessor } from './types';
 
+function isTownHallPayload(payload: PayloadEntry[], url: string): boolean {
+  if (url.includes('view=townHall')) return true;
+
+  const views = getChangeView(payload);
+  return views?.some(([view]) => view === 'townHall') ?? false;
+}
+
 export const constructionQueueProcessor: PayloadProcessor = {
   name: 'constructionQueue',
 
-  canHandle({ payload }) {
-    return getUpdateBackgroundData(payload) != null;
+  canHandle({ payload, url }) {
+    if (!getUpdateBackgroundData(payload)?.id) return false;
+    return isTownHallPayload(payload, url);
   },
 
   handle({ payload }) {
