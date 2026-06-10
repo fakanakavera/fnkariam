@@ -1,7 +1,10 @@
 import { Fragment, useMemo, useState } from 'react';
 import { RESOURCE_ICONS } from '../assets/resourceIcons';
 import { useGame } from '../context/GameContext';
+import type { City } from '../types/game';
 import { cityDistance } from '../utils/cityDistance';
+
+type CalculationMode = 'equalize' | 'fillSafe';
 
 interface WineRoute {
   fromId: string;
@@ -10,6 +13,52 @@ interface WineRoute {
   toName: string;
   amount: number;
   boats: number;
+}
+
+interface Demander {
+  city: City;
+  currentWine: number;
+  safe: number;
+  spending: number;
+  finalAllocated: number;
+}
+
+function computeEqualizeAllocations(demanders: Demander[], totalAvailable: number) {
+  const active = demanders.filter((item) => item.spending > 0);
+  if (active.length === 0 || totalAvailable <= 0) return;
+
+  const computeNeed = (targetHours: number) =>
+    active.reduce((sum, item) => sum + Math.max(0, item.spending * targetHours - item.currentWine), 0);
+
+  let low = 0;
+  let high = 1;
+  while (computeNeed(high) < totalAvailable) {
+    high *= 2;
+  }
+
+  for (let step = 0; step < 64; step += 1) {
+    const mid = (low + high) / 2;
+    if (computeNeed(mid) < totalAvailable) low = mid;
+    else high = mid;
+  }
+
+  active.forEach((item) => {
+    item.finalAllocated = Math.max(0, item.spending * low - item.currentWine);
+  });
+}
+
+function computeFillSafeAllocations(demanders: Demander[], totalAvailable: number) {
+  const needed = demanders.map((item) => Math.max(0, item.safe - item.currentWine));
+  const totalNeeded = needed.reduce((sum, value) => sum + value, 0);
+  if (totalNeeded <= 0 || totalAvailable <= 0) return;
+
+  demanders.forEach((item, index) => {
+    if (totalAvailable >= totalNeeded) {
+      item.finalAllocated = needed[index];
+    } else {
+      item.finalAllocated = (needed[index] / totalNeeded) * totalAvailable;
+    }
+  });
 }
 
 function ResourceIcon({ src, alt }: { src: string; alt: string }) {
@@ -30,8 +79,22 @@ function formatTimeLeft(stock: number, spending: number) {
   return days > 0 ? `${days}d ${remainingHours}h` : `${remainingHours}h`;
 }
 
+function modeButtonStyle(active: boolean) {
+  return {
+    backgroundColor: active ? 'var(--bg-dark-wood)' : '#fff',
+    color: active ? '#fff' : 'var(--bg-dark-wood)',
+    border: '1px solid var(--bg-dark-wood)',
+    padding: '8px 14px',
+    borderRadius: 'var(--radius)',
+    fontWeight: 'bold' as const,
+    cursor: 'pointer' as const,
+    fontSize: '0.85rem',
+  };
+}
+
 export function WineCentral() {
   const { cities } = useGame();
+  const [calculationMode, setCalculationMode] = useState<CalculationMode>('equalize');
   const [sourceIds, setSourceIds] = useState<string[]>([]);
   const [destinationIds, setDestinationIds] = useState<string[]>([]);
   const [minTransport, setMinTransport] = useState(500);
@@ -81,14 +144,7 @@ export function WineCentral() {
     }
 
     const suppliers: Array<{ city: (typeof cities)[number]; available: number }> = [];
-    const demanders: Array<{
-      city: (typeof cities)[number];
-      currentWine: number;
-      safe: number;
-      spending: number;
-      neededToSafe: number;
-      finalAllocated: number;
-    }> = [];
+    const demanders: Demander[] = [];
 
     cities.forEach((city) => {
       if (!city.details) return;
@@ -108,36 +164,18 @@ export function WineCentral() {
           currentWine,
           safe,
           spending,
-          neededToSafe: Math.max(0, safe - currentWine),
           finalAllocated: 0,
         });
       }
     });
 
     const totalAvailable = suppliers.reduce((sum, item) => sum + item.available, 0);
-    const totalNeeded = demanders.reduce((sum, item) => sum + item.neededToSafe, 0);
 
     if (totalAvailable > 0 && demanders.length > 0) {
-      if (totalAvailable <= totalNeeded) {
-        const totalSpending = demanders.reduce((sum, item) => sum + item.spending, 0);
-        if (totalSpending > 0) {
-          demanders.forEach((item) => {
-            const share = item.spending / totalSpending;
-            item.finalAllocated = Math.min(item.neededToSafe, totalAvailable * share);
-          });
-        }
+      if (calculationMode === 'equalize') {
+        computeEqualizeAllocations(demanders, totalAvailable);
       } else {
-        demanders.forEach((item) => {
-          item.finalAllocated = item.neededToSafe;
-        });
-        const surplus = totalAvailable - totalNeeded;
-        const totalSpending = demanders.reduce((sum, item) => sum + item.spending, 0);
-        if (totalSpending > 0) {
-          demanders.forEach((item) => {
-            const share = item.spending / totalSpending;
-            item.finalAllocated += surplus * share;
-          });
-        }
+        computeFillSafeAllocations(demanders, totalAvailable);
       }
     }
 
@@ -178,12 +216,31 @@ export function WineCentral() {
 
   return (
     <div className="overview-container">
-      <div className="overview-header">
+      <div className="overview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
         <div>
           <h2 style={{ fontSize: '1.6rem', marginBottom: '4px' }}>Central do Vinho</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
             Gerenciamento logístico e distribuição inteligente de tabernas.
           </p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Modo de cálculo</span>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={() => setCalculationMode('equalize')}
+              style={modeButtonStyle(calculationMode === 'equalize')}
+            >
+              Equalizar tempo restante
+            </button>
+            <button
+              type="button"
+              onClick={() => setCalculationMode('fillSafe')}
+              style={modeButtonStyle(calculationMode === 'fillSafe')}
+            >
+              Completar reserva segura
+            </button>
+          </div>
         </div>
       </div>
 
