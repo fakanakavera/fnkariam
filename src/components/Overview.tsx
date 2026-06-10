@@ -24,9 +24,10 @@ function getCityStatus(lastUpdate: number | null) {
   return { emoji: '✅', tooltip: `Última atualização: ${minutes}m atrás.${hint}` };
 }
 
-function getWineTimeLeft(stock: number, spending: number) {
-  if (!spending) return null;
-  const hours = stock / spending;
+function getWineTimeLeft(stock: number, spending: number, production = 0) {
+  const netConsumption = spending - production;
+  if (netConsumption <= 0) return spending > 0 ? '∞' : null;
+  const hours = stock / netConsumption;
   return hours <= 48 ? `${Math.floor(hours)}h restando` : `${Math.floor(hours / 24)}d restando`;
 }
 
@@ -259,7 +260,11 @@ export function Overview() {
                                 fontWeight: 500,
                               }}
                             >
-                              {getWineTimeLeft(city.details!.currentResources[1], city.details!.wineSpendings) || '—'}
+                              {getWineTimeLeft(
+                                city.details!.currentResources[1],
+                                city.details!.wineSpendings,
+                                city.tradegood === 1 ? city.details!.tradegoodProduction : 0,
+                              ) || '—'}
                             </div>
                           )}
                         </div>

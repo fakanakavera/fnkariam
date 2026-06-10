@@ -22,9 +22,10 @@ function ResourceIcon({ src, alt }: { src: string; alt: string }) {
   );
 }
 
-function formatTimeLeft(stock: number, spending: number) {
-  if (spending <= 0) return '∞';
-  const hours = stock / spending;
+function formatTimeLeft(stock: number, spending: number, production = 0) {
+  const netConsumption = spending - production;
+  if (netConsumption <= 0) return '∞';
+  const hours = stock / netConsumption;
   const days = Math.floor(hours / 24);
   const remainingHours = Math.floor(hours % 24);
   return days > 0 ? `${days}d ${remainingHours}h` : `${remainingHours}h`;
@@ -233,7 +234,9 @@ export function WineCentral() {
               const safe = city.details.safeResources || 0;
               const spending = city.details.wineSpendings || 0;
               const isProducer = city.tradegood === 1;
-              const balance = (isProducer ? city.details.tradegoodProduction || 0 : 0) - spending;
+              const production = isProducer ? city.details.tradegoodProduction || 0 : 0;
+              const balance = production - spending;
+              const netConsumption = spending - production;
 
               return (
                 <tr key={city.id} className={index % 2 === 0 ? '' : 'row-zebra'}>
@@ -242,8 +245,13 @@ export function WineCentral() {
                     {isProducer && <ResourceIcon src={RESOURCE_ICONS.wine} alt="Vinho" />}
                   </td>
                   <td>{stock.toLocaleString('pt-BR')}</td>
-                  <td style={{ fontWeight: 500, color: balance < 0 && stock / spending < 12 ? '#cc0000' : 'inherit' }}>
-                    {formatTimeLeft(stock, spending)}
+                  <td
+                    style={{
+                      fontWeight: 500,
+                      color: netConsumption > 0 && stock / netConsumption < 12 ? '#cc0000' : 'inherit',
+                    }}
+                  >
+                    {formatTimeLeft(stock, spending, production)}
                   </td>
                   <td>{safe.toLocaleString('pt-BR')}</td>
                   <td style={{ color: spending > 0 ? '#cc0000' : 'inherit' }}>
