@@ -94,12 +94,11 @@ export function getSupplierAvailable(city: City, resource: ResourceKey): number 
   const safe = city.details.safeResources || 0;
   const wineReserve = (city.details.wineSpendings || 0) * 2;
 
-  if (resource === 'wine' && cityProducesResource(city, 'wine')) {
+  if (resource === 'wine') {
     return Math.max(0, current - wineReserve);
   }
 
-  const reserve = resource === 'wine' ? wineReserve : 0;
-  return Math.max(0, current - safe - reserve);
+  return Math.max(0, current - safe);
 }
 
 export function getResourceSurplus(city: City, resource: ResourceKey): number {
