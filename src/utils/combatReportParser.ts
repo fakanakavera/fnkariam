@@ -49,25 +49,48 @@ function getUnitNamesFromRow(row: Element | null): string[] {
 
 function parseUnitRow(row: Element, unitNames: string[], side: 'attacker' | 'defender'): CombatUnitResult[] {
   const units: CombatUnitResult[] = [];
-  const cells = row.querySelectorAll('td.numbers, td.numbers2');
+  const dataCells = Array.from(row.querySelectorAll('td')).filter((td) => !td.classList.contains('firstCol'));
 
   let unitIndex = 0;
-  for (let i = 0; i < cells.length; i += 2) {
-    const countCell = cells[i];
-    const lossCell = cells[i + 1];
-    if (!countCell || countCell.classList.contains('center')) continue;
+  let i = 0;
 
-    const count = parseNumber(countCell.textContent || '0');
-    const losses = parseLosses(lossCell?.textContent || '');
+  while (i < dataCells.length && unitIndex < unitNames.length) {
+    const cell = dataCells[i];
 
-    if (count > 0 || losses > 0) {
-      units.push({
-        name: unitNames[unitIndex] || `${side === 'attacker' ? 'Atacante' : 'Defensor'} ${unitIndex + 1}`,
-        count,
-        losses,
-      });
+    // Trailing empty filler column(s) at end of row
+    if (
+      cell.colSpan > 1 &&
+      !cell.classList.contains('center') &&
+      !cell.classList.contains('numbers') &&
+      !cell.classList.contains('numbers2')
+    ) {
+      break;
     }
-    unitIndex += 1;
+
+    if (cell.classList.contains('center')) {
+      unitIndex += 1;
+      i += 1;
+      continue;
+    }
+
+    if (cell.classList.contains('numbers')) {
+      const count = parseNumber(cell.textContent || '0');
+      const losses = parseLosses(dataCells[i + 1]?.textContent || '');
+
+      if (count > 0 || losses > 0) {
+        units.push({
+          name: unitNames[unitIndex] || `${side === 'attacker' ? 'Atacante' : 'Defensor'} ${unitIndex + 1}`,
+          count,
+          losses,
+        });
+      }
+
+      unitIndex += 1;
+      i += 2;
+      continue;
+    }
+
+    i += 1;
   }
 
   return units;
