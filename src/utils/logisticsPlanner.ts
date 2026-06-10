@@ -54,26 +54,35 @@ function computeEqualizeAllocations(demanders: Demander[], totalAvailable: numbe
 }
 
 function computeFillSafeAllocations(demanders: Demander[], totalAvailable: number) {
-  const needed = demanders.map((item) => Math.max(0, item.safe - item.current));
-  const totalNeeded = needed.reduce((sum, value) => sum + value, 0);
-  if (totalNeeded <= 0 || totalAvailable <= 0) return;
+  if (totalAvailable <= 0 || demanders.length === 0) return;
 
-  demanders.forEach((item, index) => {
-    if (totalAvailable >= totalNeeded) {
-      item.finalAllocated = needed[index];
-    } else {
-      item.finalAllocated = (needed[index] / totalNeeded) * totalAvailable;
-    }
+  demanders.forEach((item) => {
+    item.finalAllocated = 0;
   });
-}
 
-function roundToCargo(amount: number): number {
-  if (amount <= CARGO_SIZE) return amount;
-  const remainder = amount % CARGO_SIZE;
-  if (remainder > 0 && amount - remainder >= CARGO_SIZE) {
-    return amount - remainder;
+  let remaining = totalAvailable;
+
+  const belowSafe = demanders
+    .filter((item) => item.current < item.safe)
+    .sort((a, b) => b.safe - b.current - (a.safe - a.current));
+
+  for (const item of belowSafe) {
+    if (remaining <= 0) break;
+    const need = item.safe - item.current;
+    const allocation = Math.min(need, remaining);
+    item.finalAllocated = allocation;
+    remaining -= allocation;
   }
-  return amount;
+
+  if (remaining <= 0) return;
+
+  const aboveSafe = demanders.filter((item) => item.current > item.safe);
+  const surplusTarget =
+    aboveSafe.length > 0
+      ? aboveSafe.reduce((best, item) => (item.current - item.safe > best.current - best.safe ? item : best))
+      : demanders.reduce((best, item) => (item.current > best.current ? item : best));
+
+  surplusTarget.finalAllocated += remaining;
 }
 
 export function calculateLogisticsRoutes(
@@ -134,8 +143,7 @@ export function calculateLogisticsRoutes(
     for (const demander of demanderPool) {
       if (supplier.available <= 0 || demander.finalAllocated <= 0) continue;
 
-      let amount = Math.min(supplier.available, demander.finalAllocated);
-      amount = roundToCargo(amount);
+      let amount = Math.floor(Math.min(supplier.available, demander.finalAllocated));
 
       if (amount >= minTransport) {
         result.push({
@@ -143,7 +151,7 @@ export function calculateLogisticsRoutes(
           fromName: supplier.city.name,
           toId: demander.city.id,
           toName: demander.city.name,
-          amount: Math.floor(amount),
+          amount: amount,
           boats: Math.ceil(amount / CARGO_SIZE),
         });
         supplier.available -= amount;
