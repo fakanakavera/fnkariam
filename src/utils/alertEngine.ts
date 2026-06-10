@@ -2,6 +2,7 @@ import { loadAlertSettings, loadAlertState, saveAlertState } from '../storage/al
 import { GAME_STATE_STORAGE_KEY } from '../types/gameState';
 import type { StoredGameState } from '../types/gameState';
 import type { City } from '../types/game';
+import { showAlertNotification } from './alertNotification';
 import { RESOURCE_INDEX, RESOURCE_KEYS, RESOURCE_LABELS, formatWineTimeLeft } from './resourceUtils';
 
 const ALERT_COOLDOWN_MS = 60 * 60 * 1000;
@@ -107,12 +108,7 @@ async function fireAlert(alert: PendingAlert, state: { lastFired: Record<string,
   const last = state.lastFired[alert.key] || 0;
   if (Date.now() - last < ALERT_COOLDOWN_MS) return;
 
-  await browser.notifications.create(alert.key, {
-    type: 'basic',
-    iconUrl: browser.runtime.getURL('/icon-48.png'),
-    title: `ika-ext — ${alert.title}`,
-    message: alert.message,
-  });
+  await showAlertNotification(alert.key, `ika-ext — ${alert.title}`, alert.message);
 
   state.lastFired[alert.key] = Date.now();
 }
