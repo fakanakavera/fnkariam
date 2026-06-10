@@ -2,11 +2,11 @@ import { useState, type CSSProperties } from 'react';
 import { BarbarianVillage } from '../../components/BarbarianVillage';
 import { CombatReports } from '../../components/CombatReports';
 import { Overview } from '../../components/Overview';
-import { WineCentral } from '../../components/WineCentral';
+import { Logistics } from '../../components/Logistics';
 import { GameProvider } from '../../context/GameContext';
 import '../../assets/page.css';
 
-type Tab = 'overview' | 'wineCentral' | 'barbarianVillage' | 'combatReports';
+type Tab = 'overview' | 'logistics' | 'barbarianVillage' | 'combatReports';
 
 function navButtonStyle(active: boolean): CSSProperties {
   return {
@@ -49,8 +49,8 @@ function HubLayout() {
           <button onClick={() => setTab('overview')} style={navButtonStyle(tab === 'overview')}>
             Visão Geral
           </button>
-          <button onClick={() => setTab('wineCentral')} style={navButtonStyle(tab === 'wineCentral')}>
-            Central do Vinho
+          <button onClick={() => setTab('logistics')} style={navButtonStyle(tab === 'logistics')}>
+            Logística
           </button>
           <button onClick={() => setTab('barbarianVillage')} style={navButtonStyle(tab === 'barbarianVillage')}>
             Vila dos Bárbaros
@@ -72,7 +72,7 @@ function HubLayout() {
           }}
         >
           {tab === 'overview' && <Overview />}
-          {tab === 'wineCentral' && <WineCentral />}
+          {tab === 'logistics' && <Logistics />}
           {tab === 'barbarianVillage' && <BarbarianVillage />}
           {tab === 'combatReports' && <CombatReports />}
         </div>
