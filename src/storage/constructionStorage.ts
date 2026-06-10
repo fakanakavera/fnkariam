@@ -1,4 +1,5 @@
 import { loadAlertSettings } from './alertSettingsStorage';
+import { showAlertNotification } from '../utils/alertNotification';
 import {
   CONSTRUCTION_ALERT_MINUTES,
   CONSTRUCTION_FINISH_ALARM_PREFIX,
@@ -99,12 +100,11 @@ async function fireConstructionNotification(item: ConstructionItem) {
   const remainingMin = Math.max(1, Math.ceil((item.finishTime - Date.now()) / 60000));
 
   try {
-    await browser.notifications.create(`construction-alert-${item.id}`, {
-      type: 'basic',
-      iconUrl: browser.runtime.getURL('/icon-48.png'),
-      title: 'ika-ext — Construção terminando',
-      message: `${item.buildingName} (${item.cityName}) termina em ~${remainingMin} min`,
-    });
+    await showAlertNotification(
+      `construction-alert-${item.id}`,
+      'ika-ext — Construção terminando',
+      `${item.buildingName} (${item.cityName}) termina em ~${remainingMin} min`,
+    );
   } catch (error) {
     console.error('[constructionStorage] Falha ao criar notificação:', error);
   }
