@@ -222,8 +222,7 @@ export function WineCentral() {
               <th>Estoque</th>
               <th>Tempo Restante</th>
               <th>Seguro</th>
-              <th>Consumo da Taberna</th>
-              <th>Balanço</th>
+              <th>Balanço de Vinho</th>
             </tr>
           </thead>
           <tbody>
@@ -254,11 +253,8 @@ export function WineCentral() {
                     {formatTimeLeft(stock, spending, production)}
                   </td>
                   <td>{safe.toLocaleString('pt-BR')}</td>
-                  <td style={{ color: spending > 0 ? '#cc0000' : 'inherit' }}>
-                    {spending > 0 ? `-${spending}/h` : '0/h'}
-                  </td>
-                  <td style={{ fontWeight: 600, color: balance < 0 ? '#cc0000' : '#007700' }}>
-                    {balance > 0 ? `+${balance}/h` : `${balance}/h`}
+                  <td style={{ fontWeight: 600, color: balance < 0 ? '#cc0000' : balance > 0 ? '#007700' : 'inherit' }}>
+                    {balance > 0 ? `+${balance}/h` : balance < 0 ? `${balance}/h` : '0/h'}
                   </td>
                 </tr>
               );

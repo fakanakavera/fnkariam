@@ -141,13 +141,17 @@ export function Overview() {
                 <th>População</th>
                 <th>Produção ({suffix})</th>
                 <th>Estoque na Cidade</th>
-                <th>Gasto Taberna</th>
+                <th>Balanço de Vinho</th>
               </tr>
             </thead>
             <tbody>
               {cities.map((city, index) => {
                 const hasDetails = !!city.details;
                 const status = getCityStatus(city.lastUpdate);
+                const wineProduction = hasDetails && city.tradegood === 1 ? city.details!.tradegoodProduction : 0;
+                const wineSpending = hasDetails ? city.details!.wineSpendings : 0;
+                const wineBalance = wineProduction - wineSpending;
+                const scaledWineBalance = wineBalance * multiplier;
 
                 return (
                   <tr key={city.id} className={index % 2 === 0 ? '' : 'row-zebra'}>
@@ -238,20 +242,22 @@ export function Overview() {
                         <div>
                           <span
                             style={{
-                              color: city.details!.wineSpendings > 0 ? '#cc0000' : 'var(--text-dark)',
-                              fontWeight: city.details!.wineSpendings > 0 ? 'bold' : 'normal',
+                              color: wineBalance < 0 ? '#cc0000' : wineBalance > 0 ? '#007700' : 'var(--text-dark)',
+                              fontWeight: wineBalance !== 0 ? 'bold' : 'normal',
                               display: 'flex',
                               alignItems: 'center',
                             }}
                           >
-                            {city.details!.wineSpendings > 0 && (
+                            {(wineSpending > 0 || wineProduction > 0) && (
                               <ResourceIcon src={RESOURCE_ICONS.wine} alt="Vinho" />
                             )}
-                            {city.details!.wineSpendings > 0
-                              ? `-${city.details!.wineSpendings * multiplier}`
-                              : '0'}
+                            {wineBalance > 0
+                              ? `+${scaledWineBalance}${suffix}`
+                              : wineBalance < 0
+                                ? `${scaledWineBalance}${suffix}`
+                                : `0${suffix}`}
                           </span>
-                          {city.details!.wineSpendings > 0 && (
+                          {(wineSpending > 0 || wineProduction > 0) && (
                             <div
                               style={{
                                 fontSize: '0.75rem',
@@ -260,11 +266,7 @@ export function Overview() {
                                 fontWeight: 500,
                               }}
                             >
-                              {getWineTimeLeft(
-                                city.details!.currentResources[1],
-                                city.details!.wineSpendings,
-                                city.tradegood === 1 ? city.details!.tradegoodProduction : 0,
-                              ) || '—'}
+                              {getWineTimeLeft(city.details!.currentResources[1], wineSpending, wineProduction) || '—'}
                             </div>
                           )}
                         </div>
