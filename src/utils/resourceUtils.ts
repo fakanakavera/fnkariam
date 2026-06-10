@@ -92,13 +92,22 @@ export function getSupplierAvailable(city: City, resource: ResourceKey): number 
 
   const current = getResourceStock(city, resource);
   const safe = city.details.safeResources || 0;
-  const wineReserve = (city.details.wineSpendings || 0) * 2;
+
+  if (current > safe) {
+    return current - safe;
+  }
 
   if (resource === 'wine') {
+    const wineReserve = (city.details.wineSpendings || 0) * 2;
     return Math.max(0, current - wineReserve);
   }
 
-  return Math.max(0, current - safe);
+  const production = getResourceProduction(city, resource);
+  if (cityProducesResource(city, resource) && production > 0) {
+    return Math.max(0, current - production * 2);
+  }
+
+  return Math.max(0, current);
 }
 
 export function getResourceSurplus(city: City, resource: ResourceKey): number {
