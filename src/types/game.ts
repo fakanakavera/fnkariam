@@ -1,3 +1,9 @@
+export interface CityBuilding {
+  position: number;
+  buildingId: number;
+  level: number;
+}
+
 export interface CityDetails {
   resourceProduction: number;
   tradegoodProduction: number;
@@ -6,6 +12,7 @@ export interface CityDetails {
   citizens: number;
   population: number;
   safeResources: number;
+  buildings?: CityBuilding[];
 }
 
 export interface City {
