@@ -226,22 +226,17 @@ export function Logistics() {
             {cities.map((city) => {
               if (!city.details) return null;
               const available = getSupplierAvailable(city, resource);
-              const enabled = available > 0;
               return (
-                <div
-                  key={city.id}
-                  style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', opacity: enabled ? 1 : 0.5 }}
-                >
+                <div key={city.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
                   <input
                     type="checkbox"
-                    disabled={!enabled}
                     checked={sourceIds.includes(city.id)}
                     onChange={() => toggleSource(city.id)}
                     style={{ marginRight: '8px' }}
                   />
                   <label style={{ fontSize: '0.9rem' }}>
                     {city.name}
-                    {enabled && (
+                    {available > 0 && (
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '6px' }}>
                         (+{Math.floor(available).toLocaleString('pt-BR')})
                       </span>
