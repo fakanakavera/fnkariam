@@ -86,3 +86,22 @@ export function formatWineTimeLeft(stock: number, spending: number): string | nu
   const hours = stock / spending;
   return hours <= 48 ? `${Math.floor(hours)}h` : `${Math.floor(hours / 24)}d`;
 }
+
+export function getSupplierAvailable(city: City, resource: ResourceKey): number {
+  if (!city.details) return 0;
+
+  const current = getResourceStock(city, resource);
+  const safe = city.details.safeResources || 0;
+  const wineReserve = (city.details.wineSpendings || 0) * 2;
+
+  if (resource === 'wine' && cityProducesResource(city, 'wine')) {
+    return Math.max(0, current - wineReserve);
+  }
+
+  const reserve = resource === 'wine' ? wineReserve : 0;
+  return Math.max(0, current - safe - reserve);
+}
+
+export function getResourceSurplus(city: City, resource: ResourceKey): number {
+  return getSupplierAvailable(city, resource);
+}

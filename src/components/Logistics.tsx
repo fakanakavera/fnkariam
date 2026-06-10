@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { RESOURCE_ICONS } from '../assets/resourceIcons';
 import { useGame } from '../context/GameContext';
 import type { ResourceKey } from '../types/buildings';
-import { calculateLogisticsRoutes } from '../utils/logisticsPlanner';
+import { calculateLogisticsRoutes, type CalculationMode } from '../utils/logisticsPlanner';
 import {
   RESOURCE_KEYS,
   RESOURCE_LABELS,
@@ -10,12 +10,28 @@ import {
   formatWineTimeLeft,
   getResourceProduction,
   getResourceStock,
+  getResourceSurplus,
+  getSupplierAvailable,
 } from '../utils/resourceUtils';
 import { ResourceIcon } from './shared/ResourceIcon';
+
+function modeButtonStyle(active: boolean) {
+  return {
+    backgroundColor: active ? 'var(--bg-dark-wood)' : '#fff',
+    color: active ? '#fff' : 'var(--bg-dark-wood)',
+    border: '1px solid var(--bg-dark-wood)',
+    padding: '8px 14px',
+    borderRadius: 'var(--radius)',
+    fontWeight: 'bold' as const,
+    cursor: 'pointer' as const,
+    fontSize: '0.85rem',
+  };
+}
 
 export function Logistics() {
   const { cities } = useGame();
   const [resource, setResource] = useState<ResourceKey>('wine');
+  const [calculationMode, setCalculationMode] = useState<CalculationMode>('equalize');
   const [sourceIds, setSourceIds] = useState<string[]>([]);
   const [destinationIds, setDestinationIds] = useState<string[]>([]);
   const [minTransport, setMinTransport] = useState(500);
@@ -61,35 +77,75 @@ export function Logistics() {
       alert('Selecione pelo menos uma cidade de origem.');
       return;
     }
-    setRoutes(calculateLogisticsRoutes(cities, resource, sourceIds, destinationIds, minTransport));
+    if (destinationIds.length === 0) {
+      alert('Selecione pelo menos uma cidade de destino.');
+      return;
+    }
+    setRoutes(
+      calculateLogisticsRoutes(cities, resource, sourceIds, destinationIds, minTransport, calculationMode),
+    );
     setShowRoutes(true);
   };
 
   return (
     <div className="overview-container">
-      <div className="overview-header">
+      <div
+        className="overview-header"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: '16px',
+          flexWrap: 'wrap',
+        }}
+      >
         <div>
           <h2 style={{ fontSize: '1.6rem', marginBottom: '4px' }}>Logística</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
             Planejamento de rotas de recursos entre cidades (inclui vinho, madeira e bens de luxo).
           </p>
         </div>
-        <select
-          value={resource}
-          onChange={(e) => {
-            setResource(e.target.value as ResourceKey);
-            setSourceIds([]);
-            setDestinationIds([]);
-            setShowRoutes(false);
-          }}
-          style={{ padding: '8px 12px', borderRadius: 'var(--radius)', fontWeight: 'bold' }}
-        >
-          {RESOURCE_KEYS.map((key) => (
-            <option key={key} value={key}>
-              {RESOURCE_LABELS[key]}
-            </option>
-          ))}
-        </select>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-end' }}>
+          <select
+            value={resource}
+            onChange={(e) => {
+              const next = e.target.value as ResourceKey;
+              setResource(next);
+              if (next !== 'wine') setCalculationMode('fillSafe');
+              setSourceIds([]);
+              setDestinationIds([]);
+              setShowRoutes(false);
+            }}
+            style={{ padding: '8px 12px', borderRadius: 'var(--radius)', fontWeight: 'bold' }}
+          >
+            {RESOURCE_KEYS.map((key) => (
+              <option key={key} value={key}>
+                {RESOURCE_LABELS[key]}
+              </option>
+            ))}
+          </select>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Modo de cálculo</span>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setCalculationMode('equalize')}
+                style={modeButtonStyle(calculationMode === 'equalize')}
+                disabled={resource !== 'wine'}
+                title={resource !== 'wine' ? 'Disponível apenas para vinho' : undefined}
+              >
+                Equalizar tempo restante
+              </button>
+              <button
+                type="button"
+                onClick={() => setCalculationMode('fillSafe')}
+                style={modeButtonStyle(calculationMode === 'fillSafe')}
+              >
+                Completar reserva segura
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {(staleInfo.missing.length > 0 || staleInfo.stale.length > 0) && (
@@ -127,20 +183,18 @@ export function Logistics() {
               const stock = getResourceStock(city, resource);
               const safe = city.details.safeResources || 0;
               const production = getResourceProduction(city, resource);
-              const reserve = resource === 'wine' ? (city.details.wineSpendings || 0) * 2 : 0;
-              const surplus = stock - safe - reserve;
+              const surplus = getResourceSurplus(city, resource);
               const isProducer = cityProducesResource(city, resource);
 
               return (
                 <tr key={city.id} className={index % 2 === 0 ? '' : 'row-zebra'}>
                   <td style={{ fontWeight: 'bold' }}>
-                    {city.name} {isProducer && <ResourceIcon src={RESOURCE_ICONS[resource]} alt={RESOURCE_LABELS[resource]} />}
+                    {city.name}{' '}
+                    {isProducer && <ResourceIcon src={RESOURCE_ICONS[resource]} alt={RESOURCE_LABELS[resource]} />}
                   </td>
                   <td>{stock.toLocaleString('pt-BR')}</td>
                   {resource === 'wine' && (
-                    <td>
-                      {formatWineTimeLeft(stock, city.details.wineSpendings || 0) || '∞'}
-                    </td>
+                    <td>{formatWineTimeLeft(stock, city.details.wineSpendings || 0) || '∞'}</td>
                   )}
                   <td>{safe.toLocaleString('pt-BR')}</td>
                   <td style={{ color: production > 0 ? '#007700' : 'inherit' }}>+{production}</td>
@@ -159,18 +213,25 @@ export function Logistics() {
         style={{ backgroundColor: '#fdfaf0', padding: '20px', border: '1px solid #e2d3b5' }}
       >
         <h3 style={{ fontSize: '1.1rem', marginBottom: '14px' }}>Configurar Rotas</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '20px' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '20px',
+            marginBottom: '20px',
+          }}
+        >
           <div style={{ background: '#fff', padding: '12px', borderRadius: 'var(--radius)', border: '1px solid #e8e1cf' }}>
             <h4 style={{ fontSize: '0.95rem', marginBottom: '10px' }}>Origem (excedente)</h4>
             {cities.map((city) => {
               if (!city.details) return null;
-              const canProduce = cityProducesResource(city, resource);
-              const stock = getResourceStock(city, resource);
-              const safe = city.details.safeResources || 0;
-              const hasSurplus = stock > safe;
-              const enabled = canProduce || hasSurplus;
+              const available = getSupplierAvailable(city, resource);
+              const enabled = available > 0;
               return (
-                <div key={city.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', opacity: enabled ? 1 : 0.5 }}>
+                <div
+                  key={city.id}
+                  style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', opacity: enabled ? 1 : 0.5 }}
+                >
                   <input
                     type="checkbox"
                     disabled={!enabled}
@@ -178,7 +239,14 @@ export function Logistics() {
                     onChange={() => toggleSource(city.id)}
                     style={{ marginRight: '8px' }}
                   />
-                  <label style={{ fontSize: '0.9rem' }}>{city.name}</label>
+                  <label style={{ fontSize: '0.9rem' }}>
+                    {city.name}
+                    {enabled && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '6px' }}>
+                        (+{Math.floor(available).toLocaleString('pt-BR')})
+                      </span>
+                    )}
+                  </label>
                 </div>
               );
             })}
@@ -189,7 +257,10 @@ export function Logistics() {
               if (!city.details) return null;
               const isSource = sourceIds.includes(city.id);
               return (
-                <div key={city.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', opacity: isSource ? 0.4 : 1 }}>
+                <div
+                  key={city.id}
+                  style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', opacity: isSource ? 0.4 : 1 }}
+                >
                   <input
                     type="checkbox"
                     disabled={isSource}
