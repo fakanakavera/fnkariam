@@ -1,4 +1,5 @@
 import { dispatchServerResponse } from '../processors';
+import { processBuildingUpgrade } from '../utils/processBuildingUpgrade';
 
 export default defineContentScript({
   matches: ['*://*.ikariam.gameforge.com/*'],
@@ -15,6 +16,11 @@ export default defineContentScript({
 
       try {
         const payload = JSON.parse(response);
+
+        if (url.includes('view')) {
+          processBuildingUpgrade(payload);
+        }
+
         void dispatchServerResponse(url, payload);
       } catch (error) {
         console.error('[Content Script] Falha ao parsear JSON bruto:', error);

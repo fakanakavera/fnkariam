@@ -30,17 +30,25 @@ function parseAgentPair(text: string): { lost: number; deployed: number } {
   return { lost: parseInt(match[1], 10), deployed: parseInt(match[2], 10) };
 }
 
-function parseCityLink(cityCell: Element | null): { name: string; coords: string; cityId: string } {
+function parseCityLink(cityCell: Element | null): {
+  name: string;
+  coords: string;
+  cityId: string;
+  islandX: number;
+  islandY: number;
+} {
   const link = cityCell?.querySelector('a');
   const href = link?.getAttribute('href') || '';
   const cityId = href.match(/selectCity=(\d+)/)?.[1] || '';
+  const islandX = parseInt(href.match(/xcoord=(\d+)/)?.[1] || '0', 10);
+  const islandY = parseInt(href.match(/ycoord=(\d+)/)?.[1] || '0', 10);
 
   const linkText = link?.textContent?.replace(/\s+/g, ' ').trim() || '';
   const coordsMatch = linkText.match(/\[(\d+)\s*:\s*(\d+)\]/);
   const coords = coordsMatch ? `[${coordsMatch[1]}:${coordsMatch[2]}]` : '';
   const name = linkText.replace(/\[\d+\s*:\s*\d+\]/, '').trim();
 
-  return { name, coords, cityId };
+  return { name, coords, cityId, islandX, islandY };
 }
 
 function parseResourcesTable(table: HTMLTableElement): SpyResources | null {
@@ -169,6 +177,8 @@ function parseSummaryRow(row: Element): SpyReport | null {
     targetOwner,
     targetCityName: cityInfo.name,
     targetCityId: cityInfo.cityId,
+    islandX: cityInfo.islandX,
+    islandY: cityInfo.islandY,
     coords: cityInfo.coords,
     mission,
     success,
@@ -261,9 +271,4 @@ export function buildMemoEntryForReport(report: SpyReport): string | null {
   if (isResourceMission(report.mission)) return formatResourceMemoEntry(report);
   if (isTroopMission(report.mission)) return formatTroopMemoEntry(report);
   return null;
-}
-
-export function getCityMemoKey(report: SpyReport): string {
-  if (report.targetCityId) return report.targetCityId;
-  return `${report.targetCityName}|${report.coords}|${report.targetOwner}`;
 }

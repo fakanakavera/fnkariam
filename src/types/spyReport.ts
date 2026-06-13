@@ -22,6 +22,8 @@ export interface SpyReport {
   targetOwner: string;
   targetCityName: string;
   targetCityId: string;
+  islandX: number;
+  islandY: number;
   coords: string;
   mission: string;
   success: boolean;

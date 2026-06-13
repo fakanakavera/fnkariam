@@ -1,74 +1,53 @@
-import type { CityMemo } from '../types/cityMemo';
-import { CITY_MEMOS_STORAGE_KEY } from '../types/cityMemo';
+import { loadCityNotes, upsertCityNote } from './cityNotesStorage';
+import type { CityNote } from '../types/cityNotes';
 import type { SpyReport } from '../types/spyReport';
-import { buildMemoEntryForReport, getCityMemoKey } from '../utils/spyReportParser';
+import { buildMemoEntryForReport } from '../utils/spyReportParser';
 
-export async function loadCityMemos(): Promise<CityMemo[]> {
-  const result = await browser.storage.local.get(CITY_MEMOS_STORAGE_KEY);
-  return (result[CITY_MEMOS_STORAGE_KEY] as CityMemo[] | undefined) || [];
-}
+async function findCityNoteForReport(report: SpyReport): Promise<CityNote | null> {
+  const store = await loadCityNotes();
+  const notes = Object.values(store);
+  const cityId = report.targetCityId ? parseInt(report.targetCityId, 10) : undefined;
 
-export async function saveCityMemos(memos: CityMemo[]) {
-  await browser.storage.local.set({ [CITY_MEMOS_STORAGE_KEY]: memos });
-}
+  if (cityId) {
+    const byId = notes.find((note) => note.cityId === cityId);
+    if (byId) return byId;
+  }
 
-export async function getCityMemo(cityKey: string): Promise<CityMemo | null> {
-  const memos = await loadCityMemos();
-  return memos.find((memo) => memo.cityId === cityKey) || null;
-}
+  if (report.islandX && report.islandY) {
+    return (
+      notes.find(
+        (note) =>
+          note.islandX === report.islandX &&
+          note.islandY === report.islandY &&
+          note.cityName === report.targetCityName,
+      ) ?? null
+    );
+  }
 
-export async function updateCityMemo(cityKey: string, memoText: string) {
-  const memos = await loadCityMemos();
-  const index = memos.findIndex((memo) => memo.cityId === cityKey);
-  if (index === -1) return;
-
-  memos[index] = {
-    ...memos[index],
-    memo: memoText,
-    lastUpdated: Date.now(),
-  };
-
-  await saveCityMemos(memos);
+  return null;
 }
 
 export async function appendReportToCityMemo(report: SpyReport): Promise<boolean> {
   const entry = buildMemoEntryForReport(report);
   if (!entry || (!report.targetCityId && !report.targetCityName)) return false;
 
-  const cityKey = getCityMemoKey(report);
-  const memos = await loadCityMemos();
-  const existingIndex = memos.findIndex((memo) => memo.cityId === cityKey);
-
   const marker = `[spy:${report.id}]`;
-  if (existingIndex >= 0 && memos[existingIndex].memo.includes(marker)) {
-    return false;
-  }
+  const existing = await findCityNoteForReport(report);
+  if (existing?.note.includes(marker)) return false;
 
   const block = `${marker}\n${entry}`;
-  const now = Date.now();
+  const noteText = existing?.note ? `${block}\n\n${existing.note}` : block;
 
-  if (existingIndex >= 0) {
-    const current = memos[existingIndex];
-    memos[existingIndex] = {
-      ...current,
-      cityName: report.targetCityName || current.cityName,
-      coords: report.coords || current.coords,
-      owner: report.targetOwner || current.owner,
-      memo: current.memo ? `${block}\n\n${current.memo}` : block,
-      lastUpdated: now,
-    };
-  } else {
-    memos.unshift({
-      cityId: cityKey,
-      cityName: report.targetCityName,
-      coords: report.coords,
-      owner: report.targetOwner,
-      memo: block,
-      lastUpdated: now,
-    });
-  }
+  await upsertCityNote({
+    islandX: existing?.islandX ?? report.islandX,
+    islandY: existing?.islandY ?? report.islandY,
+    position: existing?.position ?? 0,
+    cityName: report.targetCityName,
+    playerName: report.targetOwner,
+    cityId: report.targetCityId ? parseInt(report.targetCityId, 10) : existing?.cityId,
+    note: noteText,
+  });
 
-  await saveCityMemos(memos);
   return true;
 }
 

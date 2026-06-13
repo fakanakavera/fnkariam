@@ -5,11 +5,39 @@ export interface UpdateGlobalData {
   backgroundData?: BackgroundData;
 }
 
+export interface BackgroundBuildingPosition {
+  buildingId: number | null;
+  level?: number;
+  position?: number;
+  groundId?: number;
+  name?: string;
+  isBusy?: boolean;
+  building?: string;
+  buildingimg?: string;
+  completed?: number;
+  countdownText?: string;
+}
+
 export interface BackgroundData {
   id?: string;
   name?: string;
-  position?: Array<{ buildingId: number; level: number }>;
+  underConstruction?: number;
+  endUpgradeTime?: number;
+  startUpgradeTime?: number;
+  position?: BackgroundBuildingPosition[];
   barbarians?: { level?: string };
+}
+
+export function getUpdateBackgroundData(payload: PayloadEntry[]): BackgroundData | null {
+  const entry = findEntry(payload, 'updateBackgroundData');
+  if (entry && typeof entry === 'object') {
+    return entry as BackgroundData;
+  }
+
+  const fromGlobal = getUpdateGlobalData(payload)?.backgroundData;
+  if (fromGlobal) return fromGlobal;
+
+  return getBackgroundData(payload);
 }
 
 export function asPayloadEntries(payload: unknown): PayloadEntry[] | null {
@@ -45,10 +73,27 @@ export function getBackgroundData(payload: PayloadEntry[]): BackgroundData | nul
   return null;
 }
 
+function normalizeChangeView(entry: unknown): [string, string][] {
+  if (!Array.isArray(entry) || entry.length < 2) return [];
+
+  // Ikariam sends a flat tuple: ["viewName", "<html>"]
+  if (typeof entry[0] === 'string' && typeof entry[1] === 'string') {
+    return [[entry[0], entry[1]]];
+  }
+
+  const views: [string, string][] = [];
+  for (const item of entry) {
+    if (Array.isArray(item) && typeof item[0] === 'string' && typeof item[1] === 'string') {
+      views.push([item[0], item[1]]);
+    }
+  }
+
+  return views;
+}
+
 export function getChangeView(payload: PayloadEntry[]): [string, string][] | null {
-  const entry = findEntry(payload, 'changeView');
-  if (!Array.isArray(entry)) return null;
-  return entry as [string, string][];
+  const views = normalizeChangeView(findEntry(payload, 'changeView'));
+  return views.length > 0 ? views : null;
 }
 
 export function getChangeViewHtml(payload: PayloadEntry[], marker: string): string | null {

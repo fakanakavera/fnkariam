@@ -1,7 +1,7 @@
 import { asPayloadEntries } from '../payload/ikariamPayload';
 import { barbarianProcessor } from './barbarian';
-import { buildingUpgradeProcessor } from './buildingUpgrade';
 import { combatReportProcessor } from './combatReport';
+import { constructionQueueProcessor } from './constructionQueue';
 import { resourceStateProcessor } from './resourceState';
 import { spyReportProcessor } from './spyReport';
 import type { PayloadProcessor, ServerResponse } from './types';
@@ -14,8 +14,8 @@ export const processors: PayloadProcessor[] = [
   resourceStateProcessor,
   combatReportProcessor,
   spyReportProcessor,
-  buildingUpgradeProcessor,
   barbarianProcessor,
+  constructionQueueProcessor,
 ];
 
 export async function dispatchServerResponse(url: string, payload: unknown) {

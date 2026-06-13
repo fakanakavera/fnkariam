@@ -5,118 +5,166 @@ const TRADEGOOD_TO_RESOURCE: Record<number, string> = {
   4: 'sulfur',
 };
 
+type BuildingDetail = {
+  building?: string;
+  buildingName?: string;
+  currentLevel?: number;
+  nextLevel?: number;
+  productionPreview?: string | null;
+  currentResources: Record<string, number>;
+  woodProduction: number;
+  producedTradegood: number;
+  tradegoodProduction: number;
+};
+
+function waitForBuildingUpgradePanel(timeoutMs = 3000) {
+  return new Promise<{ sidebar: HTMLElement; buildingUpgrade: HTMLElement } | null>((resolve) => {
+    const startedAt = Date.now();
+
+    const check = () => {
+      const sidebar = document.getElementById('sidebarWidget');
+      const buildingUpgrade = document.getElementById('buildingUpgrade');
+      if (sidebar && buildingUpgrade) {
+        resolve({ sidebar, buildingUpgrade });
+        return;
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        resolve(null);
+        return;
+      }
+
+      requestAnimationFrame(check);
+    };
+
+    check();
+  });
+}
+
+function injectBalance(detail: BuildingDetail) {
+  const {
+    buildingName,
+    productionPreview,
+    currentResources,
+    woodProduction,
+    producedTradegood,
+    tradegoodProduction,
+  } = detail;
+
+  void waitForBuildingUpgradePanel().then((panel) => {
+    if (!panel) return;
+
+    const { sidebar, buildingUpgrade } = panel;
+
+    sidebar.querySelector('.ika-missing-accordion')?.remove();
+
+    const resourceClasses = {
+      wood: 'wood',
+      wine: 'wine',
+      marble: 'marble',
+      crystal: 'crystal',
+      sulfur: 'sulfur',
+    };
+
+    const onlyOneAccordion = sidebar.querySelectorAll('li.accordionItem').length === 1;
+    const resourceItems = buildingUpgrade.querySelectorAll('ul.resources li:not(.time)');
+    const rows: Array<{ type: string; text: string; color: string; infoText: string }> = [];
+
+    resourceItems.forEach((item) => {
+      const type =
+        Array.from(item.classList).find((className) => className in resourceClasses) || '';
+      if (!type) return;
+
+      const hint = item.querySelector('.accesshint')?.textContent || '';
+      const raw = item.textContent?.replace(hint, '').replace(/\./g, '').trim() || '0';
+      const required = parseInt(raw, 10);
+      const available = currentResources[type] || 0;
+
+      let production = 0;
+      if (type === 'wood') production = woodProduction;
+      else if (type === TRADEGOOD_TO_RESOURCE[producedTradegood]) production = tradegoodProduction;
+
+      if (available < required) {
+        const missing = required - available;
+        const hours = production > 0 ? missing / production : null;
+        const infoText =
+          hours != null ? `${hours.toFixed(1)}h para conseguir` : 'Sem produção local';
+        rows.push({ type, text: `-${missing.toLocaleString('de-DE')}`, color: '#990033', infoText });
+      } else {
+        const surplus = available - required;
+        rows.push({ type, text: `+${surplus.toLocaleString('de-DE')}`, color: '#00802b', infoText: 'Suficiente' });
+      }
+    });
+
+    if (rows.length === 0) return;
+
+    const accordion = document.createElement('li');
+    accordion.className = 'accordionItem ika-missing-accordion';
+
+    const title = document.createElement('a');
+    title.className = `accordionTitle ${onlyOneAccordion ? 'active' : ''}`;
+    const label = buildingName ? `Balanço — ${buildingName}` : 'Balanço para Melhorar';
+    title.innerHTML = `${label} <span class="indicator"></span>`;
+
+    const content = document.createElement('div');
+    content.className = 'accordionContent';
+    content.style.display = onlyOneAccordion ? 'block' : 'none';
+
+    let html = '<ul class="resources" style="padding: 8px 10px; margin: 0;">';
+    rows.forEach((row) => {
+      html += `
+        <li class="${row.type}" style="display: flex; justify-content: space-between; align-items: center; float: none; width: auto; margin-bottom: 4px;">
+          <span style="font-weight: bold; color: ${row.color};">${row.text}</span>
+          <span style="color: var(--text-muted); font-size: 11px; font-weight: normal;">${row.infoText}</span>
+        </li>
+      `;
+    });
+    html += '</ul>';
+
+    if (productionPreview) {
+      html += `<div style="padding: 4px 10px 8px; font-size: 11px; color: #006600; font-weight: bold;">Após melhoria: ${productionPreview}</div>`;
+    }
+
+    html += `<div style="padding: 4px 10px 8px; font-size: 10px; color: #735333; border-top: 1px solid #e8e1cf; margin-top: 4px;">Abrir no Hub → Edifícios</div>`;
+    content.innerHTML = html;
+
+    accordion.appendChild(title);
+    accordion.appendChild(content);
+
+    title.addEventListener('click', (clickEvent) => {
+      clickEvent.preventDefault();
+      if (title.classList.contains('active')) {
+        title.classList.remove('active');
+        content.style.display = 'none';
+      } else {
+        title.classList.add('active');
+        content.style.display = 'block';
+      }
+    });
+
+    const firstAccordion = sidebar.querySelector('li.accordionItem');
+    if (firstAccordion) sidebar.insertBefore(accordion, firstAccordion.nextSibling);
+    else sidebar.appendChild(accordion);
+  });
+}
+
 export default defineContentScript({
   matches: ['*://*.ikariam.gameforge.com/*'],
   main() {
+    let lastDetail: BuildingDetail | null = null;
     let observer: MutationObserver | null = null;
 
     window.addEventListener('IKARIAM_BUILDING_OPENED', (event) => {
-      const customEvent = event as CustomEvent<{
-        currentResources: Record<string, number>;
-        woodProduction: number;
-        producedTradegood: number;
-        tradegoodProduction: number;
-      }>;
-
-      const { currentResources, woodProduction, producedTradegood, tradegoodProduction } =
-        customEvent.detail;
-
-      setTimeout(() => {
-        const sidebar = document.getElementById('sidebarWidget');
-        const buildingUpgrade = document.getElementById('buildingUpgrade');
-        if (!sidebar || !buildingUpgrade) return;
-
-        sidebar.querySelector('.ika-missing-accordion')?.remove();
-
-        const resourceClasses = {
-          wood: 'wood',
-          wine: 'wine',
-          marble: 'marble',
-          crystal: 'crystal',
-          sulfur: 'sulfur',
-        };
-
-        const onlyOneAccordion = sidebar.querySelectorAll('li.accordionItem').length === 1;
-        const resourceItems = buildingUpgrade.querySelectorAll('ul.resources li:not(.time)');
-        const rows: Array<{ type: string; text: string; color: string; infoText: string }> = [];
-
-        resourceItems.forEach((item) => {
-          const type =
-            Array.from(item.classList).find((className) => className in resourceClasses) || '';
-          if (!type) return;
-
-          const hint = item.querySelector('.accesshint')?.textContent || '';
-          const raw = item.textContent?.replace(hint, '').replace(/\./g, '').trim() || '0';
-          const required = parseInt(raw, 10);
-          const available = currentResources[type] || 0;
-
-          let production = 0;
-          if (type === 'wood') production = woodProduction;
-          else if (type === TRADEGOOD_TO_RESOURCE[producedTradegood]) production = tradegoodProduction;
-
-          if (available < required) {
-            const missing = required - available;
-            const infoText = production > 0 ? `${(missing / production).toFixed(1)}h de produção` : 'Sem produção';
-            rows.push({ type, text: `-${missing.toLocaleString('de-DE')}`, color: '#990033', infoText });
-          } else {
-            const surplus = available - required;
-            rows.push({ type, text: `+${surplus.toLocaleString('de-DE')}`, color: '#00802b', infoText: 'Suficiente' });
-          }
-        });
-
-        if (rows.length === 0) return;
-
-        const accordion = document.createElement('li');
-        accordion.className = 'accordionItem ika-missing-accordion';
-
-        const title = document.createElement('a');
-        title.className = `accordionTitle ${onlyOneAccordion ? 'active' : ''}`;
-        title.innerHTML = 'Balanço para Melhorar <span class="indicator"></span>';
-
-        const content = document.createElement('div');
-        content.className = 'accordionContent';
-        content.style.display = onlyOneAccordion ? 'block' : 'none';
-
-        let html = '<ul class="resources" style="padding: 8px 10px; margin: 0;">';
-        rows.forEach((row) => {
-          html += `
-            <li class="${row.type}" style="display: flex; justify-content: space-between; align-items: center; float: none; width: auto; margin-bottom: 4px;">
-              <span style="font-weight: bold; color: ${row.color};">${row.text}</span>
-              <span style="color: var(--text-muted); font-size: 11px; font-weight: normal;">${row.infoText}</span>
-            </li>
-          `;
-        });
-        html += '</ul>';
-        content.innerHTML = html;
-
-        accordion.appendChild(title);
-        accordion.appendChild(content);
-
-        title.addEventListener('click', (clickEvent) => {
-          clickEvent.preventDefault();
-          if (title.classList.contains('active')) {
-            title.classList.remove('active');
-            content.style.display = 'none';
-          } else {
-            title.classList.add('active');
-            content.style.display = 'block';
-          }
-        });
-
-        const firstAccordion = sidebar.querySelector('li.accordionItem');
-        if (firstAccordion) sidebar.insertBefore(accordion, firstAccordion.nextSibling);
-        else sidebar.appendChild(accordion);
-
-        observer?.disconnect();
-        observer = new MutationObserver(() => {
-          if (!document.getElementById('buildingUpgrade')) {
-            sidebar.querySelector('.ika-missing-accordion')?.remove();
-            observer?.disconnect();
-            observer = null;
-          }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-      }, 250);
+      const customEvent = event as CustomEvent<BuildingDetail>;
+      lastDetail = customEvent.detail;
+      injectBalance(customEvent.detail);
     });
+
+    observer = new MutationObserver(() => {
+      if (!lastDetail || !document.getElementById('buildingUpgrade')) return;
+      if (document.querySelector('.ika-missing-accordion')) return;
+      injectBalance(lastDetail);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
   },
 });

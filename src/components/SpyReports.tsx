@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { loadCityMemos, saveCityMemos, updateCityMemo } from '../storage/cityMemoStorage';
 import { clearSpyReports, SPY_REPORT_MESSAGE } from '../storage/spyStorage';
 import { SPY_REPORTS_STORAGE_KEY } from '../types/spyReport';
-import type { CityMemo } from '../types/cityMemo';
 import type { SpyReport } from '../types/spyReport';
 import {
   formatNumber,
@@ -128,130 +126,8 @@ function TroopSummary({ report }: { report: SpyReport }) {
   );
 }
 
-function CityMemosPanel({
-  memos,
-  onSave,
-}: {
-  memos: CityMemo[];
-  onSave: (cityId: string, memo: string) => Promise<void>;
-}) {
-  const [selectedMemoId, setSelectedMemoId] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
-  const [search, setSearch] = useState('');
-
-  const filteredMemos = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return memos;
-    return memos.filter((memo) =>
-      [memo.cityName, memo.coords, memo.owner, memo.memo].join(' ').toLowerCase().includes(query),
-    );
-  }, [memos, search]);
-
-  const selected = filteredMemos.find((memo) => memo.cityId === selectedMemoId) || null;
-
-  useEffect(() => {
-    if (filteredMemos.length === 0) {
-      setSelectedMemoId(null);
-      setDraft('');
-      return;
-    }
-
-    if (!selectedMemoId || !filteredMemos.some((memo) => memo.cityId === selectedMemoId)) {
-      setSelectedMemoId(filteredMemos[0].cityId);
-      setDraft(filteredMemos[0].memo);
-    }
-  }, [filteredMemos, selectedMemoId]);
-
-  useEffect(() => {
-    if (selected) setDraft(selected.memo);
-  }, [selected?.cityId, selected?.memo]);
-
-  return (
-    <section className="dashboard-section" style={{ marginTop: '24px' }}>
-      <div className="dashboard-section-header">
-        <h3>Memos de Cidades</h3>
-      </div>
-      <div style={{ padding: '16px' }}>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '12px', fontSize: '0.9rem' }}>
-          Relatórios de recursos e tropas são adicionados automaticamente ao memo da cidade alvo.
-        </p>
-
-        {memos.length === 0 ? (
-          <div style={{ color: 'var(--text-muted)' }}>Nenhum memo de cidade ainda.</div>
-        ) : (
-          <div className="combat-layout">
-            <div className="combat-list">
-              <div style={{ padding: '10px', borderBottom: '1px solid #e8e1cf' }}>
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Filtrar cidades..."
-                  style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius)', border: '1px solid #d8caa8' }}
-                />
-              </div>
-              {filteredMemos.map((memo) => (
-                <button
-                  key={memo.cityId}
-                  className={`combat-list-item ${selectedMemoId === memo.cityId ? 'active' : ''}`}
-                  onClick={() => setSelectedMemoId(memo.cityId)}
-                >
-                  <div style={{ fontWeight: 'bold' }}>{memo.cityName || 'Cidade desconhecida'}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    {memo.coords} · {memo.owner}
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {selected && (
-              <div className="combat-detail">
-                <h3 style={{ marginBottom: '4px' }}>{selected.cityName}</h3>
-                <p style={{ color: 'var(--text-muted)', marginBottom: '12px' }}>
-                  {selected.coords} · {selected.owner}
-                </p>
-                <textarea
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  rows={12}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    borderRadius: 'var(--radius)',
-                    border: '1px solid #d8caa8',
-                    fontFamily: 'inherit',
-                    fontSize: '0.9rem',
-                    lineHeight: 1.5,
-                    resize: 'vertical',
-                  }}
-                />
-                <button
-                  onClick={() => void onSave(selected.cityId, draft)}
-                  style={{
-                    marginTop: '12px',
-                    backgroundColor: 'var(--color-gold)',
-                    color: '#321',
-                    border: 'none',
-                    padding: '8px 14px',
-                    borderRadius: 'var(--radius)',
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  Salvar memo
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
 export function SpyReports() {
   const [reports, setReports] = useState<SpyReport[]>([]);
-  const [memos, setMemos] = useState<CityMemo[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [missionFilter, setMissionFilter] = useState<MissionFilter>('all');
@@ -261,14 +137,9 @@ export function SpyReports() {
 
   useEffect(() => {
     const loadData = async () => {
-      const [reportResult, memoList] = await Promise.all([
-        browser.storage.local.get(SPY_REPORTS_STORAGE_KEY),
-        loadCityMemos(),
-      ]);
-
+      const reportResult = await browser.storage.local.get(SPY_REPORTS_STORAGE_KEY);
       const stored = (reportResult[SPY_REPORTS_STORAGE_KEY] as SpyReport[] | undefined) || [];
       setReports(stored);
-      setMemos(memoList);
       if (stored.length > 0) setSelectedId(stored[0].id);
     };
 
@@ -278,7 +149,6 @@ export function SpyReports() {
       if (message.type !== SPY_REPORT_MESSAGE || !message.payload) return;
       setReports(message.payload);
       if (message.payload.length > 0) setSelectedId(message.payload[0].id);
-      void loadCityMemos().then(setMemos);
     };
 
     const onStorageChange = (
@@ -289,9 +159,6 @@ export function SpyReports() {
       if (changes[SPY_REPORTS_STORAGE_KEY]) {
         const next = changes[SPY_REPORTS_STORAGE_KEY].newValue as SpyReport[] | undefined;
         setReports(next || []);
-      }
-      if (changes.cityMemos) {
-        setMemos((changes.cityMemos.newValue as CityMemo[] | undefined) || []);
       }
     };
 
@@ -317,12 +184,6 @@ export function SpyReports() {
     setSelectedId(null);
   };
 
-  const handleSaveMemo = async (cityId: string, memo: string) => {
-    await updateCityMemo(cityId, memo);
-    const updated = await loadCityMemos();
-    setMemos(updated);
-  };
-
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
       setSortOrder((current) => (current === 'asc' ? 'desc' : 'asc'));
@@ -339,6 +200,7 @@ export function SpyReports() {
           <h2 style={{ fontSize: '1.6rem', marginBottom: '4px' }}>Relatórios de Espionagem</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
             Abra a aba de relatórios no Esconderijo do jogo para capturar todos os relatórios aqui.
+            Relatórios de recursos e tropas são adicionados automaticamente em <strong>Notas Ilha</strong>.
           </p>
         </div>
         {reports.length > 0 && (
@@ -502,7 +364,7 @@ export function SpyReports() {
 
                 {selected.addedToMemo && (
                   <p style={{ marginTop: '12px', color: '#007700', fontSize: '0.85rem' }}>
-                    Informação de recursos/tropas adicionada ao memo da cidade.
+                    Informação de recursos/tropas adicionada às notas da cidade em Notas Ilha.
                   </p>
                 )}
               </div>
@@ -514,8 +376,6 @@ export function SpyReports() {
           </div>
         </>
       )}
-
-      <CityMemosPanel memos={memos} onSave={handleSaveMemo} />
     </div>
   );
 }
