@@ -1,4 +1,5 @@
-import type { SpyReport, SpyResources, SpyTroopSection, SpyUnit } from '../types/spyReport';
+import type { SpyBuilding, SpyReport, SpyResources, SpyTroopSection, SpyUnit } from '../types/spyReport';
+import { parseBuildingsFromTextReport } from './enemyUnsecuredResources';
 import {
   asPayloadEntries,
   getChangeViewHtml,
@@ -122,7 +123,9 @@ function parseTroopTable(table: HTMLTableElement): SpyTroopSection | null {
   return { category, units };
 }
 
-function parseReportDetail(detailRow: Element | null): Pick<SpyReport, 'resources' | 'troops' | 'textReport' | 'statusText'> {
+function parseReportDetail(
+  detailRow: Element | null,
+): Pick<SpyReport, 'resources' | 'troops' | 'buildings' | 'textReport' | 'statusText'> {
   if (!detailRow) return {};
 
   const statusText =
@@ -141,15 +144,18 @@ function parseReportDetail(detailRow: Element | null): Pick<SpyReport, 'resource
 
   let textReport: string | undefined;
   const reportCell = detailRow.querySelector('td.report');
-  if (reportCell && !resourcesTable && troops.length === 0) {
+  if (reportCell) {
     const text = reportCell.textContent?.replace(/\s+/g, ' ').trim();
     if (text) textReport = text;
   }
+
+  const buildings = textReport ? parseBuildingsFromTextReport(textReport) : undefined;
 
   return {
     statusText,
     resources,
     troops: troops.length > 0 ? troops : undefined,
+    buildings: buildings?.length ? buildings : undefined,
     textReport,
   };
 }
@@ -191,6 +197,7 @@ function parseSummaryRow(row: Element): SpyReport | null {
     dateTimestamp: parseDateTimestamp(date),
     resources: detail.resources,
     troops: detail.troops,
+    buildings: detail.buildings,
     textReport: detail.textReport,
     addedToMemo: false,
     capturedAt: Date.now(),
@@ -229,11 +236,15 @@ export function findSpyReportHtmlFromEntries(payload: PayloadEntry[]): string | 
 }
 
 export function isResourceMission(mission: string): boolean {
-  return /recursos/i.test(mission);
+  return /recursos|armaz[eé]m/i.test(mission);
 }
 
 export function isTroopMission(mission: string): boolean {
-  return /tropas|frotas/i.test(mission);
+  return /tropas|frotas|guarni/i.test(mission);
+}
+
+export function isBuildingMission(mission: string): boolean {
+  return /edif[ií]cio|constru/i.test(mission);
 }
 
 export function formatNumber(value: number): string {
@@ -268,7 +279,13 @@ export function formatTroopMemoEntry(report: SpyReport): string | null {
 }
 
 export function buildMemoEntryForReport(report: SpyReport): string | null {
-  if (isResourceMission(report.mission)) return formatResourceMemoEntry(report);
+  if (isResourceMission(report.mission) && report.resources) return formatResourceMemoEntry(report);
   if (isTroopMission(report.mission)) return formatTroopMemoEntry(report);
+  if (isBuildingMission(report.mission) && report.buildings?.length) {
+    const warehouses = report.buildings.filter((building) => building.isWarehouse);
+    if (warehouses.length === 0) return null;
+    const levels = warehouses.map((building) => building.level).join(', ');
+    return `[${report.date.trim()}] ${report.mission}\nArmazéns: níveis ${levels}`;
+  }
   return null;
 }
