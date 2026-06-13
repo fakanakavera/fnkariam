@@ -7,6 +7,7 @@ import { ConstructionQueue } from '../../components/ConstructionQueue';
 import { Economy } from '../../components/Economy';
 import { Logistics } from '../../components/Logistics';
 import { Overview } from '../../components/Overview';
+import { IslandCityNotes } from '../../components/IslandCityNotes';
 import { VisitChecklist } from '../../components/VisitChecklist';
 import { GameProvider } from '../../context/GameContext';
 import '../../assets/page.css';
@@ -20,7 +21,8 @@ type Tab =
   | 'alerts'
   | 'barbarianVillage'
   | 'combatReports'
-  | 'buildingPlanner';
+  | 'buildingPlanner'
+  | 'islandNotes';
 
 const TAB_LABELS: Record<Tab, string> = {
   overview: 'Visão Geral',
@@ -32,6 +34,7 @@ const TAB_LABELS: Record<Tab, string> = {
   barbarianVillage: 'Bárbaros',
   combatReports: 'Combate',
   buildingPlanner: 'Edifícios',
+  islandNotes: 'Notas Ilha',
 };
 
 function navButtonStyle(active: boolean): CSSProperties {
@@ -102,6 +105,7 @@ function HubLayout() {
           {tab === 'barbarianVillage' && <BarbarianVillage />}
           {tab === 'combatReports' && <CombatReports />}
           {tab === 'buildingPlanner' && <BuildingPlanner />}
+          {tab === 'islandNotes' && <IslandCityNotes />}
         </div>
       </main>
     </div>
