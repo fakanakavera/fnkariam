@@ -15,6 +15,7 @@ import { findEnemyCityIntel, upsertEnemyCityIntel } from './enemyCityIntelStorag
 import { loadCityNotes, upsertCityNote } from './cityNotesStorage';
 import type { CityNote } from '../types/cityNotes';
 import type { SpyBuilding, SpyReport, SpyResources } from '../types/spyReport';
+import { getOwnCityIdSet, isOwnCityId } from '../utils/ownCityFilter';
 
 interface CityTarget {
   cityId?: number;
@@ -109,6 +110,9 @@ export async function updateEnemyCityResources(
   dateLabel: string,
   timestamp = Date.now(),
 ): Promise<void> {
+  const ownCityIds = await getOwnCityIdSet();
+  if (isOwnCityId(target.cityId, ownCityIds)) return;
+
   await upsertEnemyCityIntel({
     cityId: target.cityId,
     islandX: target.islandX,
@@ -130,6 +134,9 @@ export async function updateEnemyCityBuildings(
   dateLabel: string,
   timestamp = Date.now(),
 ): Promise<void> {
+  const ownCityIds = await getOwnCityIdSet();
+  if (isOwnCityId(target.cityId, ownCityIds)) return;
+
   await upsertEnemyCityIntel({
     cityId: target.cityId,
     islandX: target.islandX,
@@ -184,6 +191,9 @@ export async function rebuildEnemyIntelFromSpyReports(reports: SpyReport[]): Pro
       cityName: sample.targetCityName,
       playerName: sample.targetOwner,
     };
+
+    const ownCityIds = await getOwnCityIdSet();
+    if (isOwnCityId(target.cityId, ownCityIds)) continue;
 
     const resourceReport = pickLatestResourceReport(cityReports);
     const buildingReport = pickLatestBuildingReport(cityReports);

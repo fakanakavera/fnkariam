@@ -5,6 +5,7 @@ import {
   calculateUnsecuredResources,
   hasUnsecuredResources,
 } from '../utils/enemyUnsecuredResources';
+import { getOwnCityIdSet, isOwnCityId } from '../utils/ownCityFilter';
 
 export const ENEMY_CITY_INTEL_STORAGE_KEY = 'enemyCityIntel';
 
@@ -86,7 +87,30 @@ export async function loadEnemyCityIntel(): Promise<EnemyCityIntelStore> {
 
 export async function listEnemyCityIntel(): Promise<EnemyCityIntel[]> {
   const store = await loadEnemyCityIntel();
-  return Object.values(store).sort((a, b) => b.updatedAt - a.updatedAt);
+  const ownCityIds = await getOwnCityIdSet();
+
+  return Object.values(store)
+    .filter((entry) => !isOwnCityId(entry.cityId, ownCityIds))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export async function purgeOwnCityIntel(): Promise<number> {
+  const store = await loadEnemyCityIntel();
+  const ownCityIds = await getOwnCityIdSet();
+  let removed = 0;
+
+  for (const [key, entry] of Object.entries(store)) {
+    if (isOwnCityId(entry.cityId, ownCityIds)) {
+      delete store[key];
+      removed += 1;
+    }
+  }
+
+  if (removed > 0) {
+    await browser.storage.local.set({ [ENEMY_CITY_INTEL_STORAGE_KEY]: store });
+  }
+
+  return removed;
 }
 
 export async function getEnemyCityIntelByCityId(cityId: number): Promise<EnemyCityIntel | null> {
@@ -105,6 +129,10 @@ export async function upsertEnemyCityIntel(
     existingMatch?.key;
 
   if (!nextKey) return null;
+
+  const ownCityIds = await getOwnCityIdSet();
+  const cityId = input.cityId ?? existingMatch?.entry.cityId;
+  if (isOwnCityId(cityId, ownCityIds)) return null;
 
   const existing = existingMatch?.entry ?? store[nextKey];
   const merged: EnemyCityIntel = enrichIntel({
@@ -156,7 +184,12 @@ export async function findEnemyCityIntel(options: {
     islandY: options.islandY || 0,
     cityName: options.cityName || '',
   });
-  return match?.entry ?? null;
+  if (!match) return null;
+
+  const ownCityIds = await getOwnCityIdSet();
+  if (isOwnCityId(match.entry.cityId, ownCityIds)) return null;
+
+  return match.entry;
 }
 
 export async function deleteEnemyCityIntel(key: string): Promise<void> {
