@@ -1,4 +1,4 @@
-import { getCityNote, loadCityNotes, upsertCityNote } from '../storage/cityNotesStorage';
+import { findCityNote, loadCityNotes, upsertCityNote } from '../storage/cityNotesStorage';
 import { ENEMY_CITY_INTEL_STORAGE_KEY, findEnemyCityIntel } from '../storage/enemyCityIntelStorage';
 import { getIslandNote, upsertIslandNote } from '../storage/islandNotesStorage';
 import { cityNoteKey, CITY_NOTES_STORAGE_KEY, type CityNote } from '../types/cityNotes';
@@ -81,6 +81,25 @@ function removeLootMarks() {
   document.querySelectorAll('.ika-loot-mark').forEach((el) => el.remove());
 }
 
+function findLootNoteForCity(
+  lootNotes: CityNote[],
+  cityId: number | undefined,
+  position: number | undefined,
+): CityNote | undefined {
+  if (cityId != null) {
+    const byCityId = lootNotes.find((entry) => entry.cityId === cityId);
+    if (byCityId) return byCityId;
+  }
+
+  if (position == null) return undefined;
+
+  return lootNotes.find((entry) => {
+    if (entry.position !== position) return false;
+    if (cityId != null && entry.cityId != null && entry.cityId !== cityId) return false;
+    return true;
+  });
+}
+
 function applyLootMarks(notes: CityNote[], islandX: number, islandY: number) {
   removeLootMarks();
 
@@ -93,12 +112,7 @@ function applyLootMarks(notes: CityNote[], islandX: number, islandY: number) {
   cityLocations.forEach((element) => {
     const cityId = parseCityIdFromElement(element);
     const position = parsePositionFromElement(element);
-
-    const note =
-      (cityId ? lootNotes.find((entry) => entry.cityId === cityId) : undefined) ||
-      (position != null
-        ? lootNotes.find((entry) => entry.position === position)
-        : undefined);
+    const note = findLootNoteForCity(lootNotes, cityId, position);
 
     if (!note) return;
 
@@ -356,8 +370,16 @@ async function buildIntelMeta(context: IslandCityContext): Promise<string> {
 }
 
 async function injectCityPanel(sidebar: HTMLElement, context: IslandCityContext) {
-  const stored = await getCityNote(context.islandX, context.islandY, context.position);
-  const key = cityNoteKey(context.islandX, context.islandY, context.position);
+  const stored = await findCityNote({
+    islandX: context.islandX,
+    islandY: context.islandY,
+    position: context.position,
+    cityId: context.cityId,
+    cityName: context.cityName,
+  });
+  const key =
+    stored?.key ??
+    cityNoteKey(context.islandX, context.islandY, context.position);
   const shell = createAccordionShell(
     'ika-city-notes-accordion',
     'Nota da Cidade — Ikariam Hub',
