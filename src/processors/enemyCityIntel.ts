@@ -13,11 +13,35 @@ import type { SpyResources } from '../types/spyReport';
 import type { PayloadProcessor } from './types';
 
 function isForeignCity(backgroundData: BackgroundData): boolean {
-  const cityLeftMenu = (backgroundData as BackgroundData & { cityLeftMenu?: { ownCity?: number } }).cityLeftMenu;
-  return cityLeftMenu?.ownCity === 0;
+  const extended = backgroundData as BackgroundData & {
+    cityLeftMenu?: { ownCity?: number };
+    ownerId?: string | number;
+  };
+
+  if (extended.cityLeftMenu?.ownCity === 0) return true;
+
+  // When viewing a deployed spy city, relatedCity in header marks foreign context.
+  return false;
 }
 
-function parseResources(headerData: Record<string, unknown>): SpyResources | null {
+function isForeignCityHeader(headerData: Record<string, unknown>, backgroundData: BackgroundData): boolean {
+  if (isForeignCity(backgroundData)) return true;
+
+  const relatedCity = headerData.relatedCity as { owncity?: number } | undefined;
+  if (relatedCity?.owncity === 0) return true;
+
+  const currentCityId = backgroundData.id ? String(backgroundData.id) : '';
+  const dropdown = headerData.cityDropdownMenu as
+    | Record<string, { id: string; relationship?: string }>
+    | undefined;
+
+  if (!currentCityId || !dropdown) return false;
+
+  const entry = Object.values(dropdown).find((city) => city.id === currentCityId);
+  return entry != null && entry.relationship !== 'ownCity';
+}
+
+function parseResources(headerData: Record<string, unknown>): SpyResources {
   const currentResources = (headerData.currentResources || {}) as Record<string, number>;
 
   return {
@@ -47,24 +71,27 @@ export const enemyCityIntelProcessor: PayloadProcessor = {
 
   canHandle({ payload }) {
     const backgroundData = getUpdateBackgroundData(payload);
-    return backgroundData != null && isForeignCity(backgroundData);
+    const headerData = getHeaderData(payload);
+    if (!backgroundData || !headerData || !backgroundData.id) return false;
+    return isForeignCityHeader(headerData, backgroundData);
   },
 
   handle({ payload }) {
     const headerData = getHeaderData(payload);
     const backgroundData = getUpdateBackgroundData(payload);
-    if (!headerData || !backgroundData || !isForeignCity(backgroundData)) return;
+    if (!headerData || !backgroundData || !backgroundData.id) return;
+    if (!isForeignCityHeader(headerData, backgroundData)) return;
 
     const resources = parseResources(headerData);
     const buildings = parseBuildingsFromPositions(backgroundData.position);
     const { islandX, islandY } = parseIslandCoords(backgroundData);
-    const cityId = backgroundData.id ? parseInt(String(backgroundData.id), 10) : undefined;
+    const cityId = parseInt(String(backgroundData.id), 10);
     const owner = backgroundData as BackgroundData & { ownerName?: string };
 
-    if (!backgroundData.name || !islandX || !islandY) return;
+    if (!backgroundData.name || !islandX || !islandY || Number.isNaN(cityId)) return;
 
     const target = {
-      cityId: Number.isNaN(cityId) ? undefined : cityId,
+      cityId,
       islandX,
       islandY,
       cityName: backgroundData.name,
@@ -78,13 +105,13 @@ export const enemyCityIntelProcessor: PayloadProcessor = {
       void updateEnemyCityBuildings(target, buildings, dateLabel, timestamp);
     }
 
-    if (resources) {
-      void updateEnemyCityResources(target, resources, dateLabel, timestamp);
-    }
+    void updateEnemyCityResources(target, resources, dateLabel, timestamp);
   },
 };
 
 export function isForeignCityPayload(payload: PayloadEntry[]): boolean {
   const backgroundData = getUpdateBackgroundData(payload);
-  return backgroundData != null && isForeignCity(backgroundData);
+  const headerData = getHeaderData(payload);
+  if (!backgroundData || !headerData) return false;
+  return isForeignCityHeader(headerData, backgroundData);
 }

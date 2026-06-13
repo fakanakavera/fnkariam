@@ -1,4 +1,5 @@
 import { getCityNote, loadCityNotes, upsertCityNote } from '../storage/cityNotesStorage';
+import { ENEMY_CITY_INTEL_STORAGE_KEY, findEnemyCityIntel } from '../storage/enemyCityIntelStorage';
 import { getIslandNote, upsertIslandNote } from '../storage/islandNotesStorage';
 import { cityNoteKey, CITY_NOTES_STORAGE_KEY, type CityNote } from '../types/cityNotes';
 import { islandNoteKey } from '../types/islandNotes';
@@ -6,7 +7,9 @@ import {
   hasUnsecuredResources,
   parseUnsecuredFromNote,
   totalUnsecuredResources,
+  WAREHOUSE_BUILDING_ID,
 } from '../utils/enemyUnsecuredResources';
+import { summarizeEnemyIntel } from '../utils/enemyIntelSync';
 
 interface IslandContext {
   islandX: number;
@@ -300,6 +303,58 @@ async function injectIslandPanel(sidebar: HTMLElement, context: IslandContext) {
   insertAfterActions(sidebar, shell.accordion);
 }
 
+async function buildIntelMeta(context: IslandCityContext): Promise<string> {
+  const intel = await findEnemyCityIntel({
+    cityId: context.cityId,
+    islandX: context.islandX,
+    islandY: context.islandY,
+    cityName: context.cityName,
+  });
+
+  if (!intel) {
+    return `<div style="margin-top:6px; color:#735333; font-style:italic;">Sem intel desta cidade no Hub.</div>`;
+  }
+
+  const summary = summarizeEnemyIntel(intel);
+  const warehouseLevels = (intel.buildings || [])
+    .filter((building) => building.buildingId === WAREHOUSE_BUILDING_ID || building.isWarehouse)
+    .map((building) => building.level);
+
+  const lines = [
+    `<div style="margin-top:8px; padding-top:8px; border-top:1px solid #e8e1cf;"><strong>Intel — Ikariam Hub</strong></div>`,
+  ];
+
+  if (summary.hasBuildings) {
+    lines.push(
+      `<div><strong>Armazéns:</strong> níveis ${warehouseLevels.join(', ') || '—'}</div>`,
+      `<div><strong>Seguro:</strong> ${(summary.safeCapacity || 0).toLocaleString('pt-BR')} por recurso</div>`,
+    );
+  } else {
+    lines.push(`<div><strong>Edifícios:</strong> ainda não capturados</div>`);
+  }
+
+  if (summary.hasResources && intel.resources) {
+    lines.push(
+      `<div><strong>Estoque:</strong> M ${intel.resources.wood.toLocaleString('pt-BR')} · V ${intel.resources.wine.toLocaleString('pt-BR')} · Mr ${intel.resources.marble.toLocaleString('pt-BR')} · Cr ${intel.resources.crystal.toLocaleString('pt-BR')} · En ${intel.resources.sulfur.toLocaleString('pt-BR')}</div>`,
+    );
+  } else {
+    lines.push(`<div><strong>Recursos:</strong> ainda não capturados</div>`);
+  }
+
+  if (summary.isComplete) {
+    lines.push(
+      summary.hasLoot
+        ? `<div style="color:#8b0000; font-weight:bold;"><strong>Inseguro:</strong> ${Object.entries(summary.unsecured)
+            .filter(([, value]) => (value || 0) > 0)
+            .map(([key, value]) => `${key} ${Number(value).toLocaleString('pt-BR')}`)
+            .join(' · ')}</div>`
+        : `<div style="color:#006600;"><strong>Inseguro:</strong> nenhum</div>`,
+    );
+  }
+
+  return lines.join('');
+}
+
 async function injectCityPanel(sidebar: HTMLElement, context: IslandCityContext) {
   const stored = await getCityNote(context.islandX, context.islandY, context.position);
   const key = cityNoteKey(context.islandX, context.islandY, context.position);
@@ -313,6 +368,7 @@ async function injectCityPanel(sidebar: HTMLElement, context: IslandCityContext)
     <div><strong>Posição:</strong> ${context.position} em [${context.islandX}:${context.islandY}]</div>
     <div><strong>Jogador:</strong> ${context.playerName || '—'}</div>
     <div><strong>Cidade:</strong> ${context.cityName || '—'}</div>
+    ${await buildIntelMeta(context)}
   `;
   shell.textarea.value = stored?.note ?? '';
   shell.textarea.placeholder = 'Nota sobre esta cidade…';
@@ -462,10 +518,13 @@ export default defineContentScript({
     observer.observe(document.body, { childList: true, subtree: true });
 
     browser.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName !== 'local' || !changes[CITY_NOTES_STORAGE_KEY]) return;
-      const island = parseIslandContext();
-      if (!island) return;
-      void refreshLootMarks(island.islandX, island.islandY);
+      if (areaName !== 'local') return;
+      if (changes[CITY_NOTES_STORAGE_KEY] || changes[ENEMY_CITY_INTEL_STORAGE_KEY]) {
+        const island = parseIslandContext();
+        if (!island) return;
+        void refreshLootMarks(island.islandX, island.islandY);
+        if (changes[ENEMY_CITY_INTEL_STORAGE_KEY]) scheduleRefresh();
+      }
     });
 
     scheduleRefresh();

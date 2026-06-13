@@ -1,11 +1,16 @@
 import {
   calculateSafeCapacity,
   calculateUnsecuredResources,
-  formatUnsecuredNote,
+  formatIntelStatusNote,
   hasUnsecuredResources,
   mergeAutoNote,
-  parseUnsecuredFromNote,
+  WAREHOUSE_BUILDING_ID,
 } from '../utils/enemyUnsecuredResources';
+import {
+  groupSpyReportsByCity,
+  pickLatestBuildingReport,
+  pickLatestResourceReport,
+} from '../utils/enemyIntelSync';
 import { findEnemyCityIntel, upsertEnemyCityIntel } from './enemyCityIntelStorage';
 import { loadCityNotes, upsertCityNote } from './cityNotesStorage';
 import type { CityNote } from '../types/cityNotes';
@@ -49,6 +54,12 @@ async function findCityNoteForTarget(target: CityTarget): Promise<CityNote | nul
   );
 }
 
+function warehouseLevels(buildings: SpyBuilding[]): number[] {
+  return buildings
+    .filter((building) => building.buildingId === WAREHOUSE_BUILDING_ID || building.isWarehouse)
+    .map((building) => building.level);
+}
+
 export async function refreshCityNoteFromIntel(target: CityTarget): Promise<boolean> {
   const intel = await findEnemyCityIntel({
     cityId: target.cityId,
@@ -61,17 +72,21 @@ export async function refreshCityNoteFromIntel(target: CityTarget): Promise<bool
 
   const safeCapacity = calculateSafeCapacity(intel.buildings);
   const unsecured = calculateUnsecuredResources(intel.resources, safeCapacity);
-  const dateLabel = intel.resourcesDate || new Date(intel.resourcesTimestamp || Date.now()).toLocaleString('pt-BR');
-  const autoBlock = formatUnsecuredNote(unsecured, safeCapacity, dateLabel);
+  const resourcesDate =
+    intel.resourcesDate || new Date(intel.resourcesTimestamp || Date.now()).toLocaleString('pt-BR');
+
+  const autoBlock = formatIntelStatusNote({
+    resources: intel.resources,
+    safeCapacity,
+    unsecured,
+    resourcesDate,
+    buildingsDate: intel.buildingsDate,
+    warehouseLevels: warehouseLevels(intel.buildings),
+  });
 
   const existing = await findCityNoteForTarget(target);
-
   const noteText = mergeAutoNote(existing?.note || '', autoBlock);
   const hasLoot = hasUnsecuredResources(unsecured);
-
-  if (!hasLoot && !existing?.note?.trim()) {
-    return false;
-  }
 
   await upsertCityNote({
     islandX: existing?.islandX ?? target.islandX,
@@ -142,32 +157,73 @@ export async function appendReportToCityMemo(report: SpyReport): Promise<boolean
     playerName: report.targetOwner,
   };
 
+  let updated = false;
+
   if (report.resources) {
     await updateEnemyCityResources(target, report.resources, report.date.trim(), report.dateTimestamp);
-    return true;
+    updated = true;
   }
 
   if (report.buildings?.length) {
     await updateEnemyCityBuildings(target, report.buildings, report.date.trim(), report.dateTimestamp);
-    return true;
+    updated = true;
   }
 
-  return false;
+  return updated;
+}
+
+export async function rebuildEnemyIntelFromSpyReports(reports: SpyReport[]): Promise<void> {
+  const grouped = groupSpyReportsByCity(reports);
+
+  for (const cityReports of grouped.values()) {
+    const sample = cityReports[0];
+    const target: CityTarget = {
+      cityId: sample.targetCityId ? parseInt(sample.targetCityId, 10) : undefined,
+      islandX: sample.islandX,
+      islandY: sample.islandY,
+      cityName: sample.targetCityName,
+      playerName: sample.targetOwner,
+    };
+
+    const resourceReport = pickLatestResourceReport(cityReports);
+    const buildingReport = pickLatestBuildingReport(cityReports);
+
+    if (resourceReport?.resources) {
+      await upsertEnemyCityIntel({
+        cityId: target.cityId,
+        islandX: target.islandX,
+        islandY: target.islandY,
+        cityName: target.cityName,
+        playerName: target.playerName,
+        resources: resourceReport.resources,
+        resourcesDate: resourceReport.date.trim(),
+        resourcesTimestamp: resourceReport.dateTimestamp,
+      });
+    }
+
+    if (buildingReport?.buildings?.length) {
+      await upsertEnemyCityIntel({
+        cityId: target.cityId,
+        islandX: target.islandX,
+        islandY: target.islandY,
+        cityName: target.cityName,
+        playerName: target.playerName,
+        buildings: buildingReport.buildings,
+        buildingsDate: buildingReport.date.trim(),
+        buildingsTimestamp: buildingReport.dateTimestamp,
+      });
+    }
+
+    await refreshCityNoteFromIntel(target);
+  }
 }
 
 export async function syncReportsToCityMemos(reports: SpyReport[]): Promise<SpyReport[]> {
-  const updatedReports = [...reports];
+  await rebuildEnemyIntelFromSpyReports(reports);
 
-  for (let i = 0; i < updatedReports.length; i += 1) {
-    const report = updatedReports[i];
-    if (report.addedToMemo) continue;
-    if (!report.resources && !report.buildings?.length) continue;
-
-    const added = await appendReportToCityMemo(report);
-    if (added) {
-      updatedReports[i] = { ...report, addedToMemo: true };
-    }
-  }
-
-  return updatedReports;
+  return reports.map((report) => {
+    if (!report.success) return report;
+    if (!report.resources && !report.buildings?.length) return report;
+    return { ...report, addedToMemo: true };
+  });
 }
