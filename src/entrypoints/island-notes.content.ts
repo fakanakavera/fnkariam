@@ -277,18 +277,65 @@ async function injectCityPanel(sidebar: HTMLElement, context: IslandCityContext)
 
 let refreshToken = 0;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let lastInjectedContextKey = '';
+
+function getNotesContextKey(): string {
+  if (document.body.id !== 'island') return '';
+  const island = parseIslandContext();
+  if (!island) return '';
+  const city = parseSelectedCityContext();
+  const islandFeature = isIslandFeatureSelected();
+  const islandKey = islandNoteKey(island.islandX, island.islandY);
+  const cityKey =
+    city && !islandFeature
+      ? cityNoteKey(city.islandX, city.islandY, city.position)
+      : '';
+  return `${islandKey}|${cityKey}`;
+}
+
+function panelsMatchContext(sidebar: HTMLElement, showCityPanel: boolean): boolean {
+  if (!sidebar.querySelector('.ika-island-notes-accordion')) return false;
+  const hasCityPanel = sidebar.querySelector('.ika-city-notes-accordion') != null;
+  return showCityPanel ? hasCityPanel : !hasCityPanel;
+}
+
+function shouldRefreshPanels(): boolean {
+  const contextKey = getNotesContextKey();
+  if (!contextKey) return true;
+
+  const sidebar = document.getElementById('sidebarWidget');
+  if (!sidebar) return false;
+
+  const cityContext = parseSelectedCityContext();
+  const islandFeatureSelected = isIslandFeatureSelected();
+  const showCityPanel = Boolean(cityContext && !islandFeatureSelected);
+
+  if (contextKey !== lastInjectedContextKey) return true;
+  return !panelsMatchContext(sidebar, showCityPanel);
+}
+
+function isOurPanelMutation(mutations: MutationRecord[]): boolean {
+  for (const mutation of mutations) {
+    const el = mutation.target as Element;
+    if (!el || typeof el.closest !== 'function') continue;
+    if (el.closest('.ika-island-notes-accordion, .ika-city-notes-accordion')) return true;
+  }
+  return false;
+}
 
 async function refreshNotesPanels() {
   const token = ++refreshToken;
 
   if (document.body.id !== 'island') {
     removeAllNotePanels();
+    lastInjectedContextKey = '';
     return;
   }
 
   const islandContext = parseIslandContext();
   if (!islandContext) {
     removeAllNotePanels();
+    lastInjectedContextKey = '';
     return;
   }
 
@@ -313,22 +360,28 @@ async function refreshNotesPanels() {
     await injectCityPanel(sidebar, cityContext!);
     if (token !== refreshToken) {
       removeAllNotePanels();
+      return;
     }
   }
+
+  lastInjectedContextKey = getNotesContextKey();
 }
 
 function scheduleRefresh() {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
-    void refreshNotesPanels();
+    if (shouldRefreshPanels()) void refreshNotesPanels();
   }, 80);
 }
 
 export default defineContentScript({
   matches: ['*://*.ikariam.gameforge.com/*'],
   main() {
-    const observer = new MutationObserver(() => scheduleRefresh());
+    const observer = new MutationObserver((mutations) => {
+      if (isOurPanelMutation(mutations)) return;
+      scheduleRefresh();
+    });
     observer.observe(document.body, { childList: true, subtree: true });
     scheduleRefresh();
   },
