@@ -131,6 +131,54 @@ export function formatUnsecuredNote(
   ].join('\n');
 }
 
+export function formatIntelStatusNote(input: {
+  resources: SpyResources;
+  safeCapacity: number;
+  unsecured: UnsecuredResources;
+  resourcesDate: string;
+  buildingsDate?: string;
+  warehouseLevels?: number[];
+}): string {
+  const stockParts = RESOURCE_KEYS.map((key) => {
+    const stockMap: Record<ResourceKey, number> = {
+      wood: input.resources.wood,
+      wine: input.resources.wine,
+      marble: input.resources.marble,
+      crystal: input.resources.crystal,
+      sulfur: input.resources.sulfur,
+    };
+    const stock = stockMap[key];
+    if (!stock) return null;
+    return `${RESOURCE_LABELS[key]} ${formatAmount(stock)}`;
+  }).filter(Boolean);
+
+  const warehouseText = input.warehouseLevels?.length
+    ? `Armazéns nível ${input.warehouseLevels.join(', ')}`
+    : 'Armazéns conhecidos';
+
+  const unsecuredParts = RESOURCE_KEYS.filter((key) => (input.unsecured[key] || 0) > 0).map(
+    (key) => `${RESOURCE_LABELS[key]}: ${formatAmount(input.unsecured[key] || 0)}`,
+  );
+
+  const lines = [
+    AUTO_NOTE_MARKER_START,
+    `Intel inimiga (${input.resourcesDate})`,
+    warehouseText,
+    `Seguro: ${formatAmount(input.safeCapacity)} por recurso`,
+    `Estoque: ${stockParts.join(' | ') || '—'}`,
+    unsecuredParts.length > 0
+      ? `Inseguro: ${unsecuredParts.join(' | ')}`
+      : 'Inseguro: nenhum',
+    AUTO_NOTE_MARKER_END,
+  ];
+
+  if (input.buildingsDate && input.buildingsDate !== input.resourcesDate) {
+    lines.splice(2, 0, `Edifícios vistos: ${input.buildingsDate}`);
+  }
+
+  return lines.join('\n');
+}
+
 export function stripAutoNote(note: string): string {
   const start = note.indexOf(AUTO_NOTE_MARKER_START);
   if (start === -1) return note.trim();

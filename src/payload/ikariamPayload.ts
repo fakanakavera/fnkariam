@@ -42,7 +42,27 @@ export function getUpdateBackgroundData(payload: PayloadEntry[]): BackgroundData
 
 export function asPayloadEntries(payload: unknown): PayloadEntry[] | null {
   if (!Array.isArray(payload)) return null;
-  return payload as PayloadEntry[];
+  return flattenPayloadEntries(payload as PayloadEntry[]);
+}
+
+/** Ikariam sometimes nests view updates inside ajax.Responder. */
+export function flattenPayloadEntries(payload: PayloadEntry[]): PayloadEntry[] {
+  const flat: PayloadEntry[] = [];
+
+  for (const [key, value] of payload) {
+    if (key === 'ajax.Responder' && Array.isArray(value)) {
+      for (const item of value) {
+        if (Array.isArray(item) && item.length >= 2 && typeof item[0] === 'string') {
+          flat.push([item[0], item[1]]);
+        }
+      }
+      continue;
+    }
+
+    flat.push([key, value]);
+  }
+
+  return flat;
 }
 
 export function findEntry(payload: PayloadEntry[], key: string): unknown {

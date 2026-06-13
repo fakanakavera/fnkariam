@@ -5,6 +5,7 @@ import { BuildingPlanner } from '../../components/BuildingPlanner';
 import { CombatReports } from '../../components/CombatReports';
 import { ConstructionQueue } from '../../components/ConstructionQueue';
 import { Economy } from '../../components/Economy';
+import { EnemyCityIntelPanel } from '../../components/EnemyCityIntel';
 import { Logistics } from '../../components/Logistics';
 import { Overview } from '../../components/Overview';
 import { IslandCityNotes } from '../../components/IslandCityNotes';
@@ -23,6 +24,7 @@ type Tab =
   | 'barbarianVillage'
   | 'combatReports'
   | 'spyReports'
+  | 'enemyIntel'
   | 'buildingPlanner'
   | 'islandNotes';
 
@@ -36,6 +38,7 @@ const TAB_LABELS: Record<Tab, string> = {
   barbarianVillage: 'Bárbaros',
   combatReports: 'Combate',
   spyReports: 'Espionagem',
+  enemyIntel: 'Intel Inimiga',
   buildingPlanner: 'Edifícios',
   islandNotes: 'Notas Ilha',
 };
@@ -108,6 +111,7 @@ function HubLayout() {
           {tab === 'barbarianVillage' && <BarbarianVillage />}
           {tab === 'combatReports' && <CombatReports />}
           {tab === 'spyReports' && <SpyReports />}
+          {tab === 'enemyIntel' && <EnemyCityIntelPanel />}
           {tab === 'buildingPlanner' && <BuildingPlanner />}
           {tab === 'islandNotes' && <IslandCityNotes />}
         </div>

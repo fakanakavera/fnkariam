@@ -4,6 +4,11 @@ import { syncReportsToCityMemos } from './cityMemoStorage';
 
 export const SPY_REPORT_MESSAGE = 'SPY_REPORTS';
 
+export async function loadSpyReports(): Promise<SpyReport[]> {
+  const result = await browser.storage.local.get(SPY_REPORTS_STORAGE_KEY);
+  return (result[SPY_REPORTS_STORAGE_KEY] as SpyReport[] | undefined) || [];
+}
+
 export async function saveSpyReports(reports: SpyReport[]) {
   const result = await browser.storage.local.get(SPY_REPORTS_STORAGE_KEY);
   const existing = (result[SPY_REPORTS_STORAGE_KEY] as SpyReport[] | undefined) || [];
