@@ -12,8 +12,7 @@ import {
   pickLatestResourceReport,
 } from '../utils/enemyIntelSync';
 import { findEnemyCityIntel, upsertEnemyCityIntel } from './enemyCityIntelStorage';
-import { loadCityNotes, upsertCityNote } from './cityNotesStorage';
-import type { CityNote } from '../types/cityNotes';
+import { findCityNote, upsertCityNote } from './cityNotesStorage';
 import type { SpyBuilding, SpyReport, SpyResources } from '../types/spyReport';
 import { getOwnCityIdSet, isOwnCityId } from '../utils/ownCityFilter';
 
@@ -24,35 +23,6 @@ interface CityTarget {
   position?: number;
   cityName: string;
   playerName: string;
-}
-
-async function findCityNoteForTarget(target: CityTarget): Promise<CityNote | null> {
-  const store = await loadCityNotes();
-  const notes = Object.values(store);
-
-  if (target.cityId) {
-    const byId = notes.find((note) => note.cityId === target.cityId);
-    if (byId) return byId;
-  }
-
-  if (target.position != null) {
-    const byPosition = notes.find(
-      (note) =>
-        note.islandX === target.islandX &&
-        note.islandY === target.islandY &&
-        note.position === target.position,
-    );
-    if (byPosition) return byPosition;
-  }
-
-  return (
-    notes.find(
-      (note) =>
-        note.islandX === target.islandX &&
-        note.islandY === target.islandY &&
-        note.cityName === target.cityName,
-    ) ?? null
-  );
 }
 
 function warehouseLevels(buildings: SpyBuilding[]): number[] {
@@ -85,14 +55,15 @@ export async function refreshCityNoteFromIntel(target: CityTarget): Promise<bool
     warehouseLevels: warehouseLevels(intel.buildings),
   });
 
-  const existing = await findCityNoteForTarget(target);
+  const existing = await findCityNote(target);
   const noteText = mergeAutoNote(existing?.note || '', autoBlock);
   const hasLoot = hasUnsecuredResources(unsecured);
+  const resolvedPosition = existing?.position ?? target.position ?? intel.position;
 
   await upsertCityNote({
     islandX: existing?.islandX ?? target.islandX,
     islandY: existing?.islandY ?? target.islandY,
-    position: existing?.position ?? target.position ?? 0,
+    position: resolvedPosition,
     islandName: existing?.islandName,
     cityName: target.cityName,
     playerName: target.playerName,

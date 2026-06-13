@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
-  deleteCityNote,
+  deleteCityNoteByKey,
   loadCityNotes,
   upsertCityNote,
 } from '../storage/cityNotesStorage';
@@ -492,7 +492,7 @@ export function IslandCityNotes() {
                   >
                     <div>
                       <strong>
-                        [{note.islandX}:{note.islandY}] pos {note.position}
+                        [{note.islandX}:{note.islandY}]{note.position != null ? ` pos ${note.position}` : ''}
                       </strong>
                       {note.islandName ? ` — ${note.islandName}` : ''}
                     </div>
@@ -508,7 +508,7 @@ export function IslandCityNotes() {
                     note.key,
                     () => saveCityEdit(note),
                     async () => {
-                      await deleteCityNote(note.islandX, note.islandY, note.position);
+                      await deleteCityNoteByKey(note.key);
                       if (editingKey === note.key) {
                         setEditingKey(null);
                         setEditNote('');
