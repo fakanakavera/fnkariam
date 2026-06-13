@@ -17,6 +17,13 @@ export interface SpyTroopSection {
   units: SpyUnit[];
 }
 
+export interface SpyBuilding {
+  name: string;
+  level: number;
+  buildingId?: number;
+  isWarehouse?: boolean;
+}
+
 export interface SpyReport {
   id: string;
   targetOwner: string;
@@ -36,6 +43,7 @@ export interface SpyReport {
   dateTimestamp: number;
   resources?: SpyResources;
   troops?: SpyTroopSection[];
+  buildings?: SpyBuilding[];
   textReport?: string;
   addedToMemo: boolean;
   capturedAt: number;

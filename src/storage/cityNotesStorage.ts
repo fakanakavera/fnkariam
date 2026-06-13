@@ -4,6 +4,10 @@ import {
   type CityNote,
   type CityNotesStore,
 } from '../types/cityNotes';
+import {
+  hasUnsecuredResources,
+  parseUnsecuredFromNote,
+} from '../utils/enemyUnsecuredResources';
 
 export async function loadCityNotes(): Promise<CityNotesStore> {
   const result = await browser.storage.local.get(CITY_NOTES_STORAGE_KEY);
@@ -25,10 +29,12 @@ export async function upsertCityNote(note: Omit<CityNote, 'key' | 'updatedAt'> &
   const store = await loadCityNotes();
   const existing = store[key];
 
+  const unsecuredResources = parseUnsecuredFromNote(note.note);
   const entry: CityNote = {
     ...existing,
     ...note,
     key,
+    unsecuredResources: hasUnsecuredResources(unsecuredResources) ? unsecuredResources : undefined,
     updatedAt: Date.now(),
   };
 

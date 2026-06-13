@@ -1,7 +1,12 @@
-import { getCityNote, upsertCityNote } from '../storage/cityNotesStorage';
+import { getCityNote, loadCityNotes, upsertCityNote } from '../storage/cityNotesStorage';
 import { getIslandNote, upsertIslandNote } from '../storage/islandNotesStorage';
-import { cityNoteKey } from '../types/cityNotes';
+import { cityNoteKey, CITY_NOTES_STORAGE_KEY, type CityNote } from '../types/cityNotes';
 import { islandNoteKey } from '../types/islandNotes';
+import {
+  hasUnsecuredResources,
+  parseUnsecuredFromNote,
+  totalUnsecuredResources,
+} from '../utils/enemyUnsecuredResources';
 
 interface IslandContext {
   islandX: number;
@@ -42,6 +47,76 @@ function parseSelectedPosition(): number | null {
   if (!selected?.id) return null;
   const match = selected.id.match(/cityLocation(\d+)/);
   return match ? parseInt(match[1], 10) : null;
+}
+
+function parseCityIdFromElement(element: Element): number | undefined {
+  const link = element.querySelector('a[id^="js_cityLocation"]') as HTMLAnchorElement | null;
+  const href = link?.href || element.getAttribute('saved-href') || '';
+  const cityIdMatch = href.match(/(?:destinationCityId|cityId)=(\d+)/);
+  return cityIdMatch ? parseInt(cityIdMatch[1], 10) : undefined;
+}
+
+function parsePositionFromElement(element: Element): number | undefined {
+  const match = element.id.match(/cityLocation(\d+)/);
+  return match ? parseInt(match[1], 10) : undefined;
+}
+
+function noteHasLoot(note: CityNote): boolean {
+  if (note.unsecuredResources && hasUnsecuredResources(note.unsecuredResources)) return true;
+  return hasUnsecuredResources(parseUnsecuredFromNote(note.note));
+}
+
+function formatLootBadge(note: CityNote): string {
+  const unsecured = note.unsecuredResources || parseUnsecuredFromNote(note.note);
+  const total = totalUnsecuredResources(unsecured);
+  if (total >= 1_000_000) return `${Math.round(total / 1_000_000)}M`;
+  if (total >= 1_000) return `${Math.round(total / 1_000)}k`;
+  return String(total);
+}
+
+function removeLootMarks() {
+  document.querySelectorAll('.ika-loot-mark').forEach((el) => el.remove());
+}
+
+function applyLootMarks(notes: CityNote[], islandX: number, islandY: number) {
+  removeLootMarks();
+
+  const lootNotes = notes.filter(
+    (note) => note.islandX === islandX && note.islandY === islandY && noteHasLoot(note),
+  );
+  if (lootNotes.length === 0) return;
+
+  const cityLocations = document.querySelectorAll('.cityLocation.city, .cityLocationScroll.city');
+  cityLocations.forEach((element) => {
+    const cityId = parseCityIdFromElement(element);
+    const position = parsePositionFromElement(element);
+
+    const note =
+      (cityId ? lootNotes.find((entry) => entry.cityId === cityId) : undefined) ||
+      (position != null
+        ? lootNotes.find((entry) => entry.position === position)
+        : undefined);
+
+    if (!note) return;
+
+    const badge = document.createElement('div');
+    badge.className = 'ika-loot-mark';
+    badge.title = 'Recursos inseguros disponíveis para pilhagem';
+    badge.textContent = `💰 ${formatLootBadge(note)}`;
+    badge.style.cssText =
+      'position:absolute; top:-4px; right:-6px; z-index:30; background:#8b0000; color:#fff; border:1px solid #ffd700; border-radius:10px; padding:1px 5px; font-size:10px; font-weight:bold; line-height:1.2; pointer-events:none; white-space:nowrap; box-shadow:0 1px 3px rgba(0,0,0,0.35);';
+
+    const host = element as HTMLElement;
+    if (getComputedStyle(host).position === 'static') {
+      host.style.position = 'relative';
+    }
+    host.appendChild(badge);
+  });
+}
+
+async function refreshLootMarks(islandX: number, islandY: number) {
+  const store = await loadCityNotes();
+  applyLootMarks(Object.values(store), islandX, islandY);
 }
 
 function parseCityIdFromSelected(): number | undefined {
@@ -328,6 +403,7 @@ async function refreshNotesPanels() {
 
   if (document.body.id !== 'island') {
     removeAllNotePanels();
+    removeLootMarks();
     lastInjectedContextKey = '';
     return;
   }
@@ -365,6 +441,7 @@ async function refreshNotesPanels() {
   }
 
   lastInjectedContextKey = getNotesContextKey();
+  await refreshLootMarks(islandContext.islandX, islandContext.islandY);
 }
 
 function scheduleRefresh() {
@@ -383,6 +460,14 @@ export default defineContentScript({
       scheduleRefresh();
     });
     observer.observe(document.body, { childList: true, subtree: true });
+
+    browser.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'local' || !changes[CITY_NOTES_STORAGE_KEY]) return;
+      const island = parseIslandContext();
+      if (!island) return;
+      void refreshLootMarks(island.islandX, island.islandY);
+    });
+
     scheduleRefresh();
   },
 });
