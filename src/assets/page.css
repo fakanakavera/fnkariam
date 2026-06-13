@@ -182,6 +182,56 @@ body {
   color: var(--text-muted);
 }
 
+.spy-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  background: #fff;
+  border: var(--border-wood);
+  border-radius: var(--radius);
+}
+
+.spy-control-input {
+  padding: 8px 10px;
+  border: 1px solid #d8caa8;
+  border-radius: var(--radius);
+  min-width: 220px;
+  font-size: 0.9rem;
+}
+
+.spy-control-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.spy-sort-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.spy-sort-button {
+  border: 1px solid #d8caa8;
+  background: #fff;
+  color: var(--text-dark);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.spy-sort-button.active,
+.spy-sort-button:hover {
+  background: #fff8e8;
+  border-color: var(--color-gold);
+}
+
 @media (max-width: 900px) {
   .combat-layout {
     grid-template-columns: 1fr;

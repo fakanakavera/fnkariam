@@ -1,12 +1,13 @@
 import { useState, type CSSProperties } from 'react';
 import { BarbarianVillage } from '../../components/BarbarianVillage';
 import { CombatReports } from '../../components/CombatReports';
+import { SpyReports } from '../../components/SpyReports';
 import { Overview } from '../../components/Overview';
 import { WineCentral } from '../../components/WineCentral';
 import { GameProvider } from '../../context/GameContext';
 import '../../assets/page.css';
 
-type Tab = 'overview' | 'wineCentral' | 'barbarianVillage' | 'combatReports';
+type Tab = 'overview' | 'wineCentral' | 'barbarianVillage' | 'combatReports' | 'spyReports';
 
 function navButtonStyle(active: boolean): CSSProperties {
   return {
@@ -58,6 +59,9 @@ function HubLayout() {
           <button onClick={() => setTab('combatReports')} style={navButtonStyle(tab === 'combatReports')}>
             Relatórios de Combate
           </button>
+          <button onClick={() => setTab('spyReports')} style={navButtonStyle(tab === 'spyReports')}>
+            Espionagem
+          </button>
         </nav>
       </header>
 
@@ -75,6 +79,7 @@ function HubLayout() {
           {tab === 'wineCentral' && <WineCentral />}
           {tab === 'barbarianVillage' && <BarbarianVillage />}
           {tab === 'combatReports' && <CombatReports />}
+          {tab === 'spyReports' && <SpyReports />}
         </div>
       </main>
     </div>
