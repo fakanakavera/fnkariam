@@ -4,6 +4,7 @@ import {
   deleteEnemyCityIntel,
   ENEMY_CITY_INTEL_STORAGE_KEY,
   listEnemyCityIntel,
+  purgeOwnCityIntel,
 } from '../storage/enemyCityIntelStorage';
 import { loadSpyReports } from '../storage/spyStorage';
 import type { EnemyCityIntel } from '../storage/enemyCityIntelStorage';
@@ -41,6 +42,7 @@ export function EnemyCityIntelPanel() {
   const [status, setStatus] = useState('');
 
   const reload = useCallback(async () => {
+    await purgeOwnCityIntel();
     setEntries(await listEnemyCityIntel());
   }, []);
 

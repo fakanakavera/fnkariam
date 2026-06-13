@@ -1,13 +1,13 @@
 import {
   updateEnemyCityBuildings,
-  updateEnemyCityResources,
 } from '../storage/cityMemoStorage';
 import type { BackgroundData } from '../payload/ikariamPayload';
+import { isForeignCityPage } from '../utils/foreignCityDetection';
+import { isOwnCityId, resolveOwnCityIdSet } from '../utils/ownCityFilter';
 import {
   parseBuildingsFromPositions,
   WAREHOUSE_BUILDING_ID,
 } from '../utils/enemyUnsecuredResources';
-import type { SpyResources } from '../types/spyReport';
 
 const BUILDING_KEY_TO_ID: Record<string, number> = {
   warehouse: WAREHOUSE_BUILDING_ID,
@@ -22,23 +22,8 @@ const BUILDING_KEY_TO_ID: Record<string, number> = {
   academy: 4,
 };
 
-function parseNumber(text: string): number {
-  return parseInt(text.replace(/\./g, '').replace(/,/g, ''), 10) || 0;
-}
-
 function isForeignCityView(): boolean {
-  if (document.body.id !== 'city') return false;
-  if (document.getElementById('cityAmbrosiaFountain')?.classList.contains('fountain_foreign')) {
-    return true;
-  }
-  if (document.getElementById('js_spiesInsideText')) return true;
-
-  for (const script of document.scripts) {
-    const text = script.textContent || '';
-    if (text.includes('cityLeftMenu') && /"ownCity"\s*:\s*0/.test(text)) return true;
-  }
-
-  return false;
+  return isForeignCityPage();
 }
 
 function extractUpdateBackgroundData(): BackgroundData | null {
@@ -69,47 +54,6 @@ function extractUpdateBackgroundData(): BackgroundData | null {
           }
         }
       }
-    }
-  }
-
-  return null;
-}
-
-function parseResourcesFromDom(): SpyResources | null {
-  const fromVars = extractDataSetForView();
-  if (fromVars) return fromVars;
-
-  const wood = document.getElementById('js_GlobalMenu_wood')?.textContent;
-  if (!wood) return null;
-
-  return {
-    wood: parseNumber(wood),
-    wine: parseNumber(document.getElementById('js_GlobalMenu_wine')?.textContent || '0'),
-    marble: parseNumber(document.getElementById('js_GlobalMenu_marble')?.textContent || '0'),
-    crystal: parseNumber(document.getElementById('js_GlobalMenu_crystal')?.textContent || '0'),
-    sulfur: parseNumber(document.getElementById('js_GlobalMenu_sulfur')?.textContent || '0'),
-    gold: 0,
-  };
-}
-
-function extractDataSetForView(): SpyResources | null {
-  for (const script of document.scripts) {
-    const text = script.textContent || '';
-    const match = text.match(/currentResources:\s*JSON\.parse\('([^']+)'\)/);
-    if (!match) continue;
-
-    try {
-      const parsed = JSON.parse(match[1]) as Record<string, number>;
-      return {
-        wood: Math.floor(parsed.resource || parsed[0] || 0),
-        wine: Math.floor(parsed[1] || 0),
-        marble: Math.floor(parsed[2] || 0),
-        crystal: Math.floor(parsed[3] || 0),
-        sulfur: Math.floor(parsed[4] || 0),
-        gold: 0,
-      };
-    } catch {
-      return null;
     }
   }
 
@@ -182,26 +126,22 @@ async function captureForeignCityIntel() {
   const target = parseCityTarget(backgroundData);
   if (!target.cityName || !target.islandX || !target.islandY) return;
 
+  const ownCityIds = await resolveOwnCityIdSet();
+  if (isOwnCityId(target.cityId, ownCityIds)) return;
+
   const buildings = backgroundData?.position?.length
     ? parseBuildingsFromPositions(backgroundData.position)
     : parseBuildingsFromDom();
-  const resources = parseResourcesFromDom();
-  if (buildings.length === 0 && !resources) return;
+  if (buildings.length === 0) return;
 
-  const captureKey = `${target.cityId || target.cityName}:${buildings.length}:${JSON.stringify(resources)}`;
+  const captureKey = `${target.cityId || target.cityName}:${buildings.length}`;
   if (captureKey === lastCaptureKey) return;
   lastCaptureKey = captureKey;
 
   const timestamp = Date.now();
   const dateLabel = new Date(timestamp).toLocaleString('pt-BR');
 
-  if (buildings.length > 0) {
-    await updateEnemyCityBuildings(target, buildings, dateLabel, timestamp);
-  }
-
-  if (resources) {
-    await updateEnemyCityResources(target, resources, dateLabel, timestamp);
-  }
+  await updateEnemyCityBuildings(target, buildings, dateLabel, timestamp);
 }
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
