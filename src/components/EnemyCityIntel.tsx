@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { RESOURCE_ICONS } from '../assets/resourceIcons';
 import { rebuildEnemyIntelFromSpyReports } from '../storage/cityMemoStorage';
 import {
   deleteEnemyCityIntel,
@@ -8,8 +9,24 @@ import {
 } from '../storage/enemyCityIntelStorage';
 import { loadSpyReports } from '../storage/spyStorage';
 import type { EnemyCityIntel } from '../storage/enemyCityIntelStorage';
+import type { SpyResources } from '../types/spyReport';
+import type { ResourceKey } from '../types/buildings';
 import { summarizeEnemyIntel } from '../utils/enemyIntelSync';
+import {
+  getResourceStock,
+  shipsNeededForLoot,
+  totalUnsecuredResources,
+  type UnsecuredResources,
+} from '../utils/enemyUnsecuredResources';
 import { RESOURCE_KEYS, RESOURCE_LABELS } from '../utils/resourceUtils';
+import { ResourceIcon } from './shared/ResourceIcon';
+
+const RESOURCE_GRID_STYLE: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, max-content)',
+  gap: '4px 16px',
+  fontSize: '0.8rem',
+};
 
 function formatDate(ms?: number, fallback?: string) {
   if (fallback) return fallback;
@@ -33,6 +50,57 @@ function statusLabel(intel: EnemyCityIntel) {
   if (summary.hasResources) return 'Faltam edifícios';
   if (summary.hasBuildings) return 'Faltam recursos';
   return 'Incompleto';
+}
+
+function ResourceAmountGrid({
+  amounts,
+  highlight = false,
+  showZero = true,
+}: {
+  amounts: Partial<Record<ResourceKey, number>>;
+  highlight?: boolean;
+  showZero?: boolean;
+}) {
+  return (
+    <div style={RESOURCE_GRID_STYLE}>
+      {RESOURCE_KEYS.map((key) => {
+        const value = amounts[key] || 0;
+        if (!showZero && value <= 0) return null;
+
+        return (
+          <span
+            key={key}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              opacity: value > 0 ? 1 : 0.4,
+              color: highlight && value > 0 ? '#8b0000' : undefined,
+              fontWeight: highlight && value > 0 ? 'bold' : undefined,
+            }}
+          >
+            <ResourceIcon src={RESOURCE_ICONS[key]} alt={RESOURCE_LABELS[key]} />
+            {formatAmount(value)}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function ResourceStockCell({ resources }: { resources: SpyResources }) {
+  return (
+    <div>
+      <ResourceAmountGrid amounts={getResourceStock(resources)} />
+    </div>
+  );
+}
+
+function UnsecuredCell({ unsecured, isComplete }: { unsecured: UnsecuredResources; isComplete: boolean }) {
+  const hasLoot = RESOURCE_KEYS.some((key) => (unsecured[key] || 0) > 0);
+  if (!isComplete) return <>—</>;
+  if (!hasLoot) return <span style={{ color: 'var(--text-muted)' }}>Nenhum</span>;
+
+  return <ResourceAmountGrid amounts={unsecured} highlight showZero={false} />;
 }
 
 export function EnemyCityIntelPanel() {
@@ -103,7 +171,7 @@ export function EnemyCityIntelPanel() {
           <h2 style={{ fontSize: '1.6rem', marginBottom: '4px' }}>Intel de Cidades Inimigas</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
             Recursos e edifícios capturados por relatórios de espionagem ou ao visitar uma cidade
-            inimiga com espião. Com ambos os dados, calculamos o que está acima do seguro do armazém.
+            inimiga com espião. Navios = total inseguro ÷ 500.
           </p>
         </div>
         <button
@@ -153,10 +221,11 @@ export function EnemyCityIntelPanel() {
                 <th>Cidade</th>
                 <th>Jogador</th>
                 <th>Ilha</th>
-                <th>Recursos</th>
+                <th>Estoque</th>
                 <th>Edifícios</th>
                 <th>Seguro</th>
                 <th>Inseguro</th>
+                <th>Navios</th>
                 <th>Estado</th>
                 <th></th>
               </tr>
@@ -167,6 +236,7 @@ export function EnemyCityIntelPanel() {
                 const warehouseLevels = (entry.buildings || [])
                   .filter((building) => building.isWarehouse || building.buildingId === 7)
                   .map((building) => building.level);
+                const ships = shipsNeededForLoot(summary.unsecured);
 
                 return (
                   <tr key={entry.key} className={index % 2 === 0 ? '' : 'row-zebra'}>
@@ -183,12 +253,10 @@ export function EnemyCityIntelPanel() {
                       [{entry.islandX}:{entry.islandY}]
                     </td>
                     <td>
-                      {summary.hasResources ? (
+                      {summary.hasResources && entry.resources ? (
                         <>
-                          <div>
-                            M {formatAmount(entry.resources!.wood)} · V {formatAmount(entry.resources!.wine)}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          <ResourceStockCell resources={entry.resources} />
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                             {formatDate(entry.resourcesTimestamp, entry.resourcesDate)}
                           </div>
                         </>
@@ -210,14 +278,13 @@ export function EnemyCityIntelPanel() {
                     </td>
                     <td>{summary.safeCapacity != null ? formatAmount(summary.safeCapacity) : '—'}</td>
                     <td>
-                      {summary.hasLoot ? (
-                        <span style={{ color: '#8b0000', fontWeight: 'bold' }}>
-                          {RESOURCE_KEYS.filter((key) => (summary.unsecured[key] || 0) > 0)
-                            .map((key) => `${RESOURCE_LABELS[key]} ${formatAmount(summary.unsecured[key] || 0)}`)
-                            .join(' · ')}
+                      <UnsecuredCell unsecured={summary.unsecured} isComplete={summary.isComplete} />
+                    </td>
+                    <td style={{ fontWeight: ships > 0 ? 'bold' : 'normal', color: ships > 0 ? '#8b0000' : undefined }}>
+                      {summary.isComplete && summary.hasLoot ? (
+                        <span title={`Total inseguro: ${formatAmount(totalUnsecuredResources(summary.unsecured))} ÷ 500`}>
+                          {ships}
                         </span>
-                      ) : summary.isComplete ? (
-                        <span style={{ color: 'var(--text-muted)' }}>Nenhum</span>
                       ) : (
                         '—'
                       )}

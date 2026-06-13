@@ -55,6 +55,24 @@ export function totalUnsecuredResources(unsecured: UnsecuredResources): number {
   return Object.values(unsecured).reduce((sum, value) => sum + (value || 0), 0);
 }
 
+export const LOOT_SHIP_CAPACITY = 500;
+
+export function shipsNeededForLoot(unsecured: UnsecuredResources): number {
+  const total = totalUnsecuredResources(unsecured);
+  if (total <= 0) return 0;
+  return Math.ceil(total / LOOT_SHIP_CAPACITY);
+}
+
+export function getResourceStock(resources: SpyResources): Record<ResourceKey, number> {
+  return {
+    wood: resources.wood,
+    wine: resources.wine,
+    marble: resources.marble,
+    crystal: resources.crystal,
+    sulfur: resources.sulfur,
+  };
+}
+
 function normalizeBuildingName(name: string): string {
   return name
     .normalize('NFD')
