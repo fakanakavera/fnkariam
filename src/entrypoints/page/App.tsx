@@ -8,6 +8,7 @@ import { Economy } from '../../components/Economy';
 import { Logistics } from '../../components/Logistics';
 import { Overview } from '../../components/Overview';
 import { IslandCityNotes } from '../../components/IslandCityNotes';
+import { SpyReports } from '../../components/SpyReports';
 import { VisitChecklist } from '../../components/VisitChecklist';
 import { GameProvider } from '../../context/GameContext';
 import '../../assets/page.css';
@@ -21,6 +22,7 @@ type Tab =
   | 'alerts'
   | 'barbarianVillage'
   | 'combatReports'
+  | 'spyReports'
   | 'buildingPlanner'
   | 'islandNotes';
 
@@ -33,6 +35,7 @@ const TAB_LABELS: Record<Tab, string> = {
   alerts: 'Alertas',
   barbarianVillage: 'Bárbaros',
   combatReports: 'Combate',
+  spyReports: 'Espionagem',
   buildingPlanner: 'Edifícios',
   islandNotes: 'Notas Ilha',
 };
@@ -104,6 +107,7 @@ function HubLayout() {
           {tab === 'alerts' && <AlertsSettings />}
           {tab === 'barbarianVillage' && <BarbarianVillage />}
           {tab === 'combatReports' && <CombatReports />}
+          {tab === 'spyReports' && <SpyReports />}
           {tab === 'buildingPlanner' && <BuildingPlanner />}
           {tab === 'islandNotes' && <IslandCityNotes />}
         </div>
