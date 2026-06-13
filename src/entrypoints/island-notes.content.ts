@@ -99,6 +99,22 @@ function isIslandFeatureSelected(): boolean {
   return selected != null;
 }
 
+function findActionsAccordion(sidebar: HTMLElement): HTMLLIElement | null {
+  for (const item of sidebar.querySelectorAll('li.accordionItem')) {
+    if (item.querySelector('.cityactions')) return item;
+  }
+  return null;
+}
+
+function insertAfterActions(sidebar: HTMLElement, accordion: HTMLLIElement) {
+  const actionsItem = findActionsAccordion(sidebar);
+  if (actionsItem) {
+    actionsItem.insertAdjacentElement('afterend', accordion);
+    return;
+  }
+  sidebar.appendChild(accordion);
+}
+
 function createAccordionShell(
   className: string,
   titleText: string,
@@ -116,12 +132,12 @@ function createAccordionShell(
   accordion.dataset.ikaNoteKey = datasetKey;
 
   const title = document.createElement('a');
-  title.className = 'accordionTitle active';
+  title.className = 'accordionTitle';
   title.innerHTML = `${titleText} <span class="indicator"></span>`;
 
   const content = document.createElement('div');
   content.className = 'accordionContent';
-  content.style.display = 'block';
+  content.style.display = 'none';
 
   const meta = document.createElement('div');
   meta.style.cssText =
@@ -165,34 +181,15 @@ function createAccordionShell(
   return { accordion, content, textarea, saveBtn, status, meta };
 }
 
-function insertAccordion(sidebar: HTMLElement, accordion: HTMLLIElement) {
-  const firstAccordion = sidebar.querySelector('li.accordionItem');
-  if (firstAccordion?.nextSibling) {
-    sidebar.insertBefore(accordion, firstAccordion.nextSibling);
-  } else {
-    sidebar.appendChild(accordion);
-  }
+function removeAllNotePanels() {
+  document
+    .querySelectorAll('.ika-island-notes-accordion, .ika-city-notes-accordion')
+    .forEach((el) => el.remove());
 }
 
-function removeIslandPanel() {
-  document.querySelector('.ika-island-notes-accordion')?.remove();
-}
-
-function removeCityPanel() {
-  document.querySelector('.ika-city-notes-accordion')?.remove();
-}
-
-async function injectIslandPanel(context: IslandContext) {
-  const sidebar = document.getElementById('sidebarWidget');
-  if (!sidebar) return;
-
-  const key = islandNoteKey(context.islandX, context.islandY);
-  const existing = document.querySelector('.ika-island-notes-accordion');
-  if (existing?.dataset.ikaNoteKey === key) return;
-
-  removeIslandPanel();
-
+async function injectIslandPanel(sidebar: HTMLElement, context: IslandContext) {
   const stored = await getIslandNote(context.islandX, context.islandY);
+  const key = islandNoteKey(context.islandX, context.islandY);
   const shell = createAccordionShell(
     'ika-island-notes-accordion',
     'Nota da Ilha — Ikariam Hub',
@@ -225,20 +222,12 @@ async function injectIslandPanel(context: IslandContext) {
     }
   });
 
-  insertAccordion(sidebar, shell.accordion);
+  insertAfterActions(sidebar, shell.accordion);
 }
 
-async function injectCityPanel(context: IslandCityContext) {
-  const sidebar = document.getElementById('sidebarWidget');
-  if (!sidebar) return;
-
-  const key = cityNoteKey(context.islandX, context.islandY, context.position);
-  const existing = document.querySelector('.ika-city-notes-accordion');
-  if (existing?.dataset.ikaNoteKey === key) return;
-
-  removeCityPanel();
-
+async function injectCityPanel(sidebar: HTMLElement, context: IslandCityContext) {
   const stored = await getCityNote(context.islandX, context.islandY, context.position);
+  const key = cityNoteKey(context.islandX, context.islandY, context.position);
   const shell = createAccordionShell(
     'ika-city-notes-accordion',
     'Nota da Cidade — Ikariam Hub',
@@ -278,45 +267,69 @@ async function injectCityPanel(context: IslandCityContext) {
     }
   });
 
-  const islandPanel = document.querySelector('.ika-island-notes-accordion');
+  const islandPanel = sidebar.querySelector('.ika-island-notes-accordion');
   if (islandPanel) {
     sidebar.insertBefore(shell.accordion, islandPanel);
   } else {
-    insertAccordion(sidebar, shell.accordion);
+    insertAfterActions(sidebar, shell.accordion);
   }
 }
 
-function refreshNotesPanels() {
+let refreshToken = 0;
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function refreshNotesPanels() {
+  const token = ++refreshToken;
+
   if (document.body.id !== 'island') {
-    removeIslandPanel();
-    removeCityPanel();
+    removeAllNotePanels();
     return;
   }
 
   const islandContext = parseIslandContext();
   if (!islandContext) {
-    removeIslandPanel();
-    removeCityPanel();
+    removeAllNotePanels();
     return;
   }
 
-  void injectIslandPanel(islandContext);
+  const sidebar = document.getElementById('sidebarWidget');
+  if (!sidebar) return;
 
   const cityContext = parseSelectedCityContext();
   const islandFeatureSelected = isIslandFeatureSelected();
+  const showCityPanel = cityContext && !islandFeatureSelected;
 
-  if (cityContext && !islandFeatureSelected) {
-    void injectCityPanel(cityContext);
-  } else {
-    removeCityPanel();
+  removeAllNotePanels();
+
+  if (token !== refreshToken) return;
+
+  await injectIslandPanel(sidebar, islandContext);
+  if (token !== refreshToken) {
+    removeAllNotePanels();
+    return;
   }
+
+  if (showCityPanel) {
+    await injectCityPanel(sidebar, cityContext!);
+    if (token !== refreshToken) {
+      removeAllNotePanels();
+    }
+  }
+}
+
+function scheduleRefresh() {
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    debounceTimer = null;
+    void refreshNotesPanels();
+  }, 80);
 }
 
 export default defineContentScript({
   matches: ['*://*.ikariam.gameforge.com/*'],
   main() {
-    const observer = new MutationObserver(() => refreshNotesPanels());
+    const observer = new MutationObserver(() => scheduleRefresh());
     observer.observe(document.body, { childList: true, subtree: true });
-    refreshNotesPanels();
+    scheduleRefresh();
   },
 });
