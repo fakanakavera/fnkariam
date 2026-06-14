@@ -11,9 +11,16 @@ import {
   pickLatestBuildingReport,
   pickLatestResourceReport,
 } from '../utils/enemyIntelSync';
-import { findEnemyCityIntel, upsertEnemyCityIntel } from './enemyCityIntelStorage';
+import {
+  hasCombatLoot,
+  isAttackerVictory,
+  parseCombatCityTarget,
+  subtractLootFromResources,
+} from '../utils/combatIntelSync';
+import { findEnemyCityIntel, findEnemyCityIntelByCombatTarget, upsertEnemyCityIntel } from './enemyCityIntelStorage';
 import { findCityNote, upsertCityNote } from './cityNotesStorage';
 import type { SpyBuilding, SpyReport, SpyResources } from '../types/spyReport';
+import type { CombatReport } from '../types/combatReport';
 import { getOwnCityIdSet, isOwnCityId } from '../utils/ownCityFilter';
 
 interface CityTarget {
@@ -84,6 +91,14 @@ export async function updateEnemyCityResources(
   const ownCityIds = await getOwnCityIdSet();
   if (isOwnCityId(target.cityId, ownCityIds)) return;
 
+  const existing = await findEnemyCityIntel({
+    cityId: target.cityId,
+    islandX: target.islandX,
+    islandY: target.islandY,
+    cityName: target.cityName,
+  });
+  if (existing?.resourcesTimestamp != null && timestamp <= existing.resourcesTimestamp) return;
+
   await upsertEnemyCityIntel({
     cityId: target.cityId,
     islandX: target.islandX,
@@ -150,6 +165,54 @@ export async function appendReportToCityMemo(report: SpyReport): Promise<boolean
   return updated;
 }
 
+export async function applyCombatReportToIntel(report: CombatReport): Promise<boolean> {
+  if (!hasCombatLoot(report.loot) || !isAttackerVictory(report)) return false;
+
+  const target = parseCombatCityTarget(report);
+  if (!target) return false;
+
+  const intel = await findEnemyCityIntelByCombatTarget(target);
+  if (!intel?.resources) return false;
+
+  const combatTimestamp = report.dateTimestamp || Date.now();
+  const intelTimestamp = intel.resourcesTimestamp || 0;
+  if (combatTimestamp <= intelTimestamp) return false;
+
+  const updatedResources = subtractLootFromResources(intel.resources, report.loot);
+  const cityTarget: CityTarget = {
+    cityId: intel.cityId,
+    islandX: intel.islandX,
+    islandY: intel.islandY,
+    position: intel.position,
+    cityName: intel.cityName,
+    playerName: intel.playerName,
+  };
+
+  await upsertEnemyCityIntel({
+    ...cityTarget,
+    resources: updatedResources,
+    resourcesDate: report.date.trim(),
+    resourcesTimestamp: combatTimestamp,
+  });
+
+  await refreshCityNoteFromIntel(cityTarget);
+  return true;
+}
+
+export async function syncCombatReportsToIntel(reports: CombatReport[]): Promise<number> {
+  let applied = 0;
+
+  const ordered = [...reports]
+    .filter((report) => hasCombatLoot(report.loot))
+    .sort((a, b) => (a.dateTimestamp || 0) - (b.dateTimestamp || 0));
+
+  for (const report of ordered) {
+    if (await applyCombatReportToIntel(report)) applied += 1;
+  }
+
+  return applied;
+}
+
 export async function rebuildEnemyIntelFromSpyReports(reports: SpyReport[]): Promise<void> {
   const grouped = groupSpyReportsByCity(reports);
 
@@ -168,8 +231,18 @@ export async function rebuildEnemyIntelFromSpyReports(reports: SpyReport[]): Pro
 
     const resourceReport = pickLatestResourceReport(cityReports);
     const buildingReport = pickLatestBuildingReport(cityReports);
+    const existing = await findEnemyCityIntel({
+      cityId: target.cityId,
+      islandX: target.islandX,
+      islandY: target.islandY,
+      cityName: target.cityName,
+    });
 
-    if (resourceReport?.resources) {
+    if (
+      resourceReport?.resources &&
+      (!existing?.resourcesTimestamp ||
+        resourceReport.dateTimestamp > existing.resourcesTimestamp)
+    ) {
       await upsertEnemyCityIntel({
         cityId: target.cityId,
         islandX: target.islandX,

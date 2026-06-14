@@ -5,6 +5,8 @@ import {
   calculateUnsecuredResources,
   hasUnsecuredResources,
 } from '../utils/enemyUnsecuredResources';
+import type { CombatCityTarget } from '../utils/combatIntelSync';
+import { matchesCombatCityTarget } from '../utils/combatIntelSync';
 import { getOwnCityIdSet, isOwnCityId } from '../utils/ownCityFilter';
 
 export const ENEMY_CITY_INTEL_STORAGE_KEY = 'enemyCityIntel';
@@ -190,6 +192,24 @@ export async function findEnemyCityIntel(options: {
   if (isOwnCityId(match.entry.cityId, ownCityIds)) return null;
 
   return match.entry;
+}
+
+export async function findEnemyCityIntelByCombatTarget(
+  target: CombatCityTarget,
+): Promise<EnemyCityIntel | null> {
+  const store = await loadEnemyCityIntel();
+  const ownCityIds = await getOwnCityIdSet();
+
+  const matches = Object.values(store).filter(
+    (entry) =>
+      !isOwnCityId(entry.cityId, ownCityIds) &&
+      entry.resources != null &&
+      matchesCombatCityTarget(entry.cityName, entry.playerName, target),
+  );
+
+  if (matches.length === 0) return null;
+
+  return matches.sort((a, b) => (b.resourcesTimestamp || 0) - (a.resourcesTimestamp || 0))[0];
 }
 
 export async function deleteEnemyCityIntel(key: string): Promise<void> {

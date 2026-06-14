@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { RESOURCE_ICONS } from '../assets/resourceIcons';
-import { rebuildEnemyIntelFromSpyReports } from '../storage/cityMemoStorage';
+import { rebuildEnemyIntelFromSpyReports, syncCombatReportsToIntel } from '../storage/cityMemoStorage';
 import {
   deleteEnemyCityIntel,
   ENEMY_CITY_INTEL_STORAGE_KEY,
   listEnemyCityIntel,
   purgeOwnCityIntel,
 } from '../storage/enemyCityIntelStorage';
+import { COMBAT_REPORTS_STORAGE_KEY } from '../storage/combatStorage';
 import { loadSpyReports } from '../storage/spyStorage';
+import type { CombatReport } from '../types/combatReport';
 import type { EnemyCityIntel } from '../storage/enemyCityIntelStorage';
 import type { SpyResources } from '../types/spyReport';
 import type { ResourceKey } from '../types/buildings';
@@ -120,6 +122,14 @@ export function EnemyCityIntelPanel() {
       if (reports.length > 0) {
         await rebuildEnemyIntelFromSpyReports(reports);
       }
+
+      const combatResult = await browser.storage.local.get(COMBAT_REPORTS_STORAGE_KEY);
+      const combatReports =
+        (combatResult[COMBAT_REPORTS_STORAGE_KEY] as CombatReport[] | undefined) || [];
+      if (combatReports.length > 0) {
+        await syncCombatReportsToIntel(combatReports);
+      }
+
       await reload();
     })();
 
@@ -155,8 +165,16 @@ export function EnemyCityIntelPanel() {
     try {
       const reports = await loadSpyReports();
       await rebuildEnemyIntelFromSpyReports(reports);
+
+      const combatResult = await browser.storage.local.get(COMBAT_REPORTS_STORAGE_KEY);
+      const combatReports =
+        (combatResult[COMBAT_REPORTS_STORAGE_KEY] as CombatReport[] | undefined) || [];
+      const combatApplied = await syncCombatReportsToIntel(combatReports);
+
       await reload();
-      setStatus(`Atualizado a partir de ${reports.length} relatórios.`);
+      const combatSuffix =
+        combatApplied > 0 ? ` ${combatApplied} pilhagem(ns) aplicada(s).` : '';
+      setStatus(`Atualizado a partir de ${reports.length} relatórios.${combatSuffix}`);
     } catch {
       setStatus('Erro ao ressincronizar relatórios.');
     } finally {

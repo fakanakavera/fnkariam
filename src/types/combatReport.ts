@@ -23,6 +23,7 @@ export interface CombatReport {
   id: string;
   title: string;
   date: string;
+  dateTimestamp: number;
   attacker: string;
   defender: string;
   winner: string;
