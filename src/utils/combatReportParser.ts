@@ -1,4 +1,5 @@
 import type { CombatLoot, CombatReport, CombatRound, CombatUnitResult } from '../types/combatReport';
+import { parseIkariamDateTimestamp } from './combatIntelSync';
 import {
   asPayloadEntries,
   getChangeViewHtml,
@@ -179,6 +180,7 @@ export function parseCombatReportHtml(html: string, sourceUrl = ''): CombatRepor
     id: extractCombatId(doc, sourceUrl),
     title: titleText,
     date,
+    dateTimestamp: parseIkariamDateTimestamp(date),
     attacker,
     defender,
     winner,

@@ -1,5 +1,6 @@
 import { findCombatReportHtml, parseCombatReportHtml } from '../utils/combatReportParser';
 import { notifyCombatReport, saveCombatReport } from '../storage/combatStorage';
+import { applyCombatReportToIntel } from '../storage/cityMemoStorage';
 import type { PayloadProcessor } from './types';
 
 export const combatReportProcessor: PayloadProcessor = {
@@ -16,7 +17,9 @@ export const combatReportProcessor: PayloadProcessor = {
     const report = parseCombatReportHtml(html, url);
     if (!report) return;
 
-    void saveCombatReport(report);
+    void saveCombatReport(report).then(() => {
+      void applyCombatReportToIntel(report);
+    });
     notifyCombatReport(report);
   },
 };
