@@ -15,7 +15,7 @@ import type { SpyResources } from '../types/spyReport';
 import type { ResourceKey } from '../types/buildings';
 import { summarizeEnemyIntel } from '../utils/enemyIntelSync';
 import {
-  getResourceStock,
+  getSpyResourceStock,
   shipsNeededForLoot,
   totalUnsecuredResources,
   type UnsecuredResources,
@@ -92,7 +92,7 @@ function ResourceAmountGrid({
 function ResourceStockCell({ resources }: { resources: SpyResources }) {
   return (
     <div>
-      <ResourceAmountGrid amounts={getResourceStock(resources)} />
+      <ResourceAmountGrid amounts={getSpyResourceStock(resources)} />
     </div>
   );
 }

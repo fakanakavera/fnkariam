@@ -63,7 +63,7 @@ export function shipsNeededForLoot(unsecured: UnsecuredResources): number {
   return Math.ceil(total / LOOT_SHIP_CAPACITY);
 }
 
-export function getResourceStock(resources: SpyResources): Record<ResourceKey, number> {
+export function getSpyResourceStock(resources: SpyResources): Record<ResourceKey, number> {
   return {
     wood: resources.wood,
     wine: resources.wine,
