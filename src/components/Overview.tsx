@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { RESOURCE_ICONS, TRADEGOOD_ICONS } from '../assets/resourceIcons';
 import { useGame } from '../context/GameContext';
+import { formatHoursUntilFull, getPopulationSnapshot } from '../utils/populationIntel';
 
 function ResourceIcon({ src, alt }: { src: string; alt: string }) {
   return (
@@ -181,6 +182,21 @@ export function Overview() {
                           <div style={{ fontSize: '0.75rem', color: '#006600' }}>
                             {Math.floor(city.details!.citizens)} livres
                           </div>
+                          {(() => {
+                            const snapshot = getPopulationSnapshot(city.details!);
+                            if (!snapshot) return null;
+                            return (
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                {snapshot.freeSpace} vagas
+                                {snapshot.growthPerHour != null && snapshot.growthPerHour > 0
+                                  ? ` · +${snapshot.growthPerHour.toFixed(2)}/h`
+                                  : ''}
+                                {snapshot.hoursUntilFull != null
+                                  ? ` · cheia em ${formatHoursUntilFull(snapshot.hoursUntilFull)}`
+                                  : ''}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ) : (
                         '—'

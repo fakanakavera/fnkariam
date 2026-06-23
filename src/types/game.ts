@@ -12,6 +12,17 @@ export interface CityDetails {
   citizens: number;
   population: number;
   safeResources: number;
+  /** Max inhabitants from town hall (exact after visiting Câmara Municipal). */
+  maxInhabitants?: number;
+  /** Population growth per hour (from Câmara Municipal). */
+  populationGrowth?: number;
+  /** Total satisfaction score (from Câmara Municipal). */
+  satisfaction?: number;
+  satisfactionLabel?: string;
+  wineTavernBonus?: number;
+  wineServingBonus?: number;
+  townHallLevel?: number;
+  tavernLevel?: number;
   buildings?: CityBuilding[];
 }
 

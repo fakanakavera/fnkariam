@@ -1,3 +1,4 @@
+import { getBuildingLevel } from '../data/buildingRegistry';
 import type { AccountData, City, CityBuilding } from '../types/game';
 import type { StoredGameState } from '../types/gameState';
 import {
@@ -6,6 +7,8 @@ import {
   getHeaderData,
   type PayloadEntry,
 } from '../payload/ikariamPayload';
+import type { TownHallIntel } from './townHallParser';
+import { findTownHallHtmlFromEntries, parseTownHallHtml } from './townHallParser';
 
 function parseAccount(headerData: Record<string, unknown>): AccountData {
   return {
@@ -70,6 +73,35 @@ function parseCityBuildings(
     .filter((building) => building.level > 0 && building.buildingId >= 0);
 }
 
+function getBuildingLevels(buildings: CityBuilding[]) {
+  const townHall = buildings.find((building) => building.buildingId === 0);
+  const tavern = buildings.find((building) => building.buildingId === 6);
+
+  return {
+    townHallLevel: townHall?.level,
+    tavernLevel: tavern?.level,
+    estimatedMaxInhabitants: townHall?.level
+      ? (getBuildingLevel(0, townHall.level)?.bonus?.people_cap as number | undefined)
+      : undefined,
+  };
+}
+
+function mergeTownHallIntel(details: City['details'], intel: TownHallIntel, buildingLevels: ReturnType<typeof getBuildingLevels>) {
+  if (!details) return details;
+
+  return {
+    ...details,
+    maxInhabitants: intel.maxInhabitants,
+    populationGrowth: intel.populationGrowth,
+    satisfaction: intel.satisfaction,
+    satisfactionLabel: intel.satisfactionLabel,
+    wineTavernBonus: intel.wineTavernBonus,
+    wineServingBonus: intel.wineServingBonus,
+    townHallLevel: buildingLevels.townHallLevel,
+    tavernLevel: buildingLevels.tavernLevel,
+  };
+}
+
 function updateCurrentCity(
   cities: City[],
   currentCityId: string,
@@ -78,6 +110,7 @@ function updateCurrentCity(
     name?: string;
     position?: Array<{ buildingId: number; level: number; position?: number }>;
   },
+  townHallIntel?: TownHallIntel | null,
 ): City[] {
   const currentResources = (headerData.currentResources || {}) as Record<string, number>;
   const safeResources = (backgroundData.position || []).reduce(
@@ -85,30 +118,49 @@ function updateCurrentCity(
     100,
   );
   const buildings = parseCityBuildings(backgroundData.position);
+  const buildingLevels = getBuildingLevels(buildings);
 
   return cities.map((city) => {
     if (city.id !== currentCityId) return city;
+
+    const previousDetails = city.details;
+    let details = {
+      resourceProduction: Math.round(Number(headerData.resourceProduction || 0) * 3600),
+      tradegoodProduction: Math.round(Number(headerData.tradegoodProduction || 0) * 3600),
+      currentResources: {
+        0: Math.floor(currentResources.resource || 0),
+        1: Math.floor(currentResources[1] || 0),
+        2: Math.floor(currentResources[2] || 0),
+        3: Math.floor(currentResources[3] || 0),
+        4: Math.floor(currentResources[4] || 0),
+      },
+      wineSpendings: parseInt(String(headerData.wineSpendings || 0), 10),
+      citizens: parseFloat(String(currentResources.citizens || 0)),
+      population: parseFloat(String(currentResources.population || 0)),
+      safeResources,
+      buildings,
+      townHallLevel: buildingLevels.townHallLevel,
+      tavernLevel: buildingLevels.tavernLevel,
+      maxInhabitants:
+        previousDetails?.maxInhabitants ??
+        townHallIntel?.maxInhabitants ??
+        buildingLevels.estimatedMaxInhabitants,
+      populationGrowth: previousDetails?.populationGrowth,
+      satisfaction: previousDetails?.satisfaction,
+      satisfactionLabel: previousDetails?.satisfactionLabel,
+      wineTavernBonus: previousDetails?.wineTavernBonus,
+      wineServingBonus: previousDetails?.wineServingBonus,
+    };
+
+    if (townHallIntel) {
+      details = mergeTownHallIntel(details, townHallIntel, buildingLevels)!;
+    }
 
     return {
       ...city,
       name: backgroundData.name || city.name,
       lastUpdate: Date.now(),
-      details: {
-        resourceProduction: Math.round(Number(headerData.resourceProduction || 0) * 3600),
-        tradegoodProduction: Math.round(Number(headerData.tradegoodProduction || 0) * 3600),
-        currentResources: {
-          0: Math.floor(currentResources.resource || 0),
-          1: Math.floor(currentResources[1] || 0),
-          2: Math.floor(currentResources[2] || 0),
-          3: Math.floor(currentResources[3] || 0),
-          4: Math.floor(currentResources[4] || 0),
-        },
-        wineSpendings: parseInt(String(headerData.wineSpendings || 0), 10),
-        citizens: parseFloat(String(currentResources.citizens || 0)),
-        population: parseFloat(String(currentResources.population || 0)),
-        safeResources,
-        buildings,
-      },
+      details,
     };
   });
 }
@@ -147,8 +199,11 @@ export function applyViewDataFromEntries(
     currentCityId = cityDropdownMenu[selectedKey]?.id;
   }
 
+  const townHallHtml = findTownHallHtmlFromEntries(payload);
+  const townHallIntel = townHallHtml ? parseTownHallHtml(townHallHtml) : null;
+
   if (currentCityId) {
-    cities = updateCurrentCity(cities, currentCityId, headerData, backgroundData || {});
+    cities = updateCurrentCity(cities, currentCityId, headerData, backgroundData || {}, townHallIntel);
   }
 
   return {
