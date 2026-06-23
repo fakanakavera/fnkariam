@@ -4,8 +4,9 @@ import type { CityDetails } from '../types/game';
 import {
   formatHoursUntilFull,
   getPopulationSnapshot,
-  getWineReductionAdvice,
-  type WineReductionAdvice,
+  getWineTavernAdvice,
+  hasTownHallIntel,
+  type WineTavernAction,
 } from '../utils/populationIntel';
 import { formatWineTimeLeft } from '../utils/resourceUtils';
 import { ResourceIcon } from './shared/ResourceIcon';
@@ -32,17 +33,17 @@ const RISK_COLORS: Record<RiskLevel, string> = {
   danger: '#cc0000',
 };
 
-const ADVICE_COLORS: Record<WineReductionAdvice, string> = {
-  safe: '#007700',
-  caution: '#b35c00',
-  avoid: '#cc0000',
+const ACTION_COLORS: Record<WineTavernAction, string> = {
+  reduce: '#b35c00',
+  increase: '#006699',
+  maintain: '#007700',
   unknown: 'var(--text-muted)',
 };
 
-const ADVICE_LABELS: Record<WineReductionAdvice, string> = {
-  safe: 'Pode reduzir',
-  caution: 'Cuidado',
-  avoid: 'Evitar reduzir',
+const ACTION_LABELS: Record<WineTavernAction, string> = {
+  reduce: 'Reduzir vinho',
+  increase: 'Aumentar vinho',
+  maintain: 'Manter',
   unknown: 'Dados incompletos',
 };
 
@@ -73,12 +74,12 @@ function PopulationCell({ details }: { details: CityDetails }) {
 
 function GrowthCell({ details }: { details: CityDetails }) {
   const snapshot = getPopulationSnapshot(details);
-  if (!snapshot || snapshot.growthPerHour == null) {
+  if (!hasTownHallIntel(details) || snapshot?.growthPerHour == null) {
     return <span style={{ color: 'var(--text-muted)' }}>—</span>;
   }
 
   const growth = snapshot.growthPerHour;
-  const growthColor = growth > 0 ? '#007700' : growth < 0 ? '#cc0000' : 'inherit';
+  const growthColor = growth > 0 ? '#007700' : growth < 0 ? '#cc0000' : '#b35c00';
 
   return (
     <div>
@@ -86,6 +87,9 @@ function GrowthCell({ details }: { details: CityDetails }) {
         {growth > 0 ? '+' : ''}
         {growth.toFixed(2)}/h
       </div>
+      {growth <= 0 && (
+        <div style={{ fontSize: '0.75rem', color: '#b35c00' }}>Sem crescimento</div>
+      )}
       {snapshot.hoursUntilFull != null && (
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
           Cheia em {formatHoursUntilFull(snapshot.hoursUntilFull)}
@@ -95,8 +99,51 @@ function GrowthCell({ details }: { details: CityDetails }) {
   );
 }
 
+function TavernCell({ details }: { details: CityDetails }) {
+  const snapshot = getPopulationSnapshot(details);
+  const spending = details.wineSpendings || 0;
+  const level = details.tavernLevel;
+  const hasBonuses = details.wineTavernBonus != null || details.wineServingBonus != null;
+
+  if (!level && !spending && !hasBonuses) {
+    return <span style={{ color: 'var(--text-muted)' }}>Sem taberna</span>;
+  }
+
+  return (
+    <div>
+      {level ? (
+        <div style={{ fontWeight: 600 }}>
+          Taberna nv. {level}
+          {details.wineTavernBonus != null && details.wineTavernBonus > 0 && (
+            <span style={{ color: '#990033' }}> +{details.wineTavernBonus}</span>
+          )}
+        </div>
+      ) : (
+        <div style={{ fontWeight: 600 }}>Taberna</div>
+      )}
+      {details.wineServingBonus != null && details.wineServingBonus > 0 && (
+        <div style={{ fontSize: '0.75rem', color: '#990033' }}>
+          Serviço: +{details.wineServingBonus} satisfação
+        </div>
+      )}
+      {!hasBonuses && hasTownHallIntel(details) && (
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sem bônus de vinho</div>
+      )}
+      {!hasBonuses && !hasTownHallIntel(details) && (
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Abra a CM para bônus</div>
+      )}
+      {spending > 0 && (
+        <div style={{ fontSize: '0.75rem', color: '#cc0000' }}>-{spending}/h vinho</div>
+      )}
+      {snapshot && spending > 0 && snapshot.growthPerHour != null && snapshot.growthPerHour <= 0 && (
+        <div style={{ fontSize: '0.75rem', color: '#b35c00', fontWeight: 600 }}>Vinho sem crescimento</div>
+      )}
+    </div>
+  );
+}
+
 function SatisfactionCell({ details }: { details: CityDetails }) {
-  if (details.satisfaction == null) {
+  if (!hasTownHallIntel(details) || details.satisfaction == null) {
     return <span style={{ color: 'var(--text-muted)' }}>—</span>;
   }
 
@@ -109,9 +156,6 @@ function SatisfactionCell({ details }: { details: CityDetails }) {
       {details.satisfactionLabel && (
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{details.satisfactionLabel}</div>
       )}
-      {details.wineServingBonus != null && details.wineServingBonus > 0 && (
-        <div style={{ fontSize: '0.75rem', color: '#990033' }}>+{details.wineServingBonus} vinho</div>
-      )}
     </div>
   );
 }
@@ -123,10 +167,10 @@ export function CorruptionAdvisor() {
     <div className="overview-container">
       <div className="overview-header">
         <div>
-          <h2 style={{ fontSize: '1.6rem', marginBottom: '4px' }}>Vinho e Corrupção</h2>
+          <h2 style={{ fontSize: '1.6rem', marginBottom: '4px' }}>Vinho e Taberna</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            Monitore o consumo de vinho da taberna, espaço populacional e crescimento para decidir se pode reduzir o
-            serviço de vinho.
+            Dados da Câmara Municipal: bônus da taberna, serviço de vinho, espaço e crescimento — para saber se
+            aumenta ou reduz o vinho.
           </p>
         </div>
       </div>
@@ -142,8 +186,8 @@ export function CorruptionAdvisor() {
           color: 'var(--text-muted)',
         }}
       >
-        Abra a <strong>Câmara Municipal</strong> de cada cidade no jogo para capturar capacidade, crescimento e
-        satisfação. Sem isso, só população e consumo de vinho ficam visíveis.
+        Abra a <strong>Câmara Municipal</strong> de cada cidade. Na secção <strong>Satisfação → Vinho</strong> o jogo
+        mostra o bônus do nível da taberna e do serviço de vinho — esses valores são capturados automaticamente.
       </div>
 
       <div className="table-responsive">
@@ -153,15 +197,15 @@ export function CorruptionAdvisor() {
               <th>Cidade</th>
               <th>Espaço CM</th>
               <th>Crescimento</th>
+              <th>Taberna</th>
               <th>Satisfação</th>
               <th>
                 <ResourceIcon src={RESOURCE_ICONS.wine} alt="Vinho" />
                 Estoque
               </th>
-              <th>Consumo/h</th>
               <th>Tempo restante</th>
               <th>Risco</th>
-              <th>Reduzir vinho?</th>
+              <th>Ajuste de vinho</th>
             </tr>
           </thead>
           <tbody>
@@ -182,7 +226,7 @@ export function CorruptionAdvisor() {
               const population = city.details.population || 0;
               const risk = getCorruptionRisk(stock, spending, population);
               const timeLeft = formatWineTimeLeft(stock, spending);
-              const advice = getWineReductionAdvice(city.details);
+              const advice = getWineTavernAdvice(city.details);
 
               return (
                 <tr key={city.id} className={index % 2 === 0 ? '' : 'row-zebra'}>
@@ -194,19 +238,19 @@ export function CorruptionAdvisor() {
                     <GrowthCell details={city.details} />
                   </td>
                   <td>
+                    <TavernCell details={city.details} />
+                  </td>
+                  <td>
                     <SatisfactionCell details={city.details} />
                   </td>
                   <td>{stock.toLocaleString('pt-BR')}</td>
-                  <td style={{ color: spending > 0 ? '#cc0000' : 'inherit' }}>
-                    {spending > 0 ? `-${spending}/h` : '0'}
-                  </td>
                   <td style={{ fontWeight: 500 }}>{timeLeft || (spending ? '0h' : '—')}</td>
                   <td style={{ color: RISK_COLORS[risk], fontWeight: 'bold' }}>{RISK_LABELS[risk]}</td>
                   <td>
-                    <div style={{ color: ADVICE_COLORS[advice.level], fontWeight: 'bold', marginBottom: '4px' }}>
-                      {ADVICE_LABELS[advice.level]}
+                    <div style={{ color: ACTION_COLORS[advice.action], fontWeight: 'bold', marginBottom: '4px' }}>
+                      {ACTION_LABELS[advice.action]}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '220px' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '260px' }}>
                       {advice.message}
                     </div>
                   </td>
